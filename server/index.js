@@ -9,28 +9,22 @@ import { connectToSocket } from './controller/socketManager.js';
 
 import authRouter from './router/auth.router.js';
 import userRouter from './router/user.router.js';
+import meetingRouter from './router/meeting.router.js';
 
 const app = express();
 const server = createServer(app);
 const io = connectToSocket(server);
 
-app.use(cors());
+app.use(cors({
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization']
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-
-try {
-    app.use("/auth", authRouter);
-} catch (error) {
-    console.error("XX Error setting up auth routes:", error);
-}
-
-try {
-    app.use("/user", userRouter);
-} catch (error) {
-    console.error("XX Error setting up user routes:", error);
-}
-
 
 const main = async () => {
     try {
@@ -50,7 +44,27 @@ const main = async () => {
 
 main();
 
+// auth routes
+try {
+    app.use("/auth", authRouter);
+} catch (error) {
+    console.error("XX== Error setting up auth routes ==XX:", error);
+}
+
+// user routes
+try {
+    app.use("/user", userRouter);
+} catch (error) {
+    console.error("XX== Error setting up user routes ==XX:", error);
+}
+
+// meeting routes
+try {
+    app.use("/meeting", meetingRouter);
+} catch (error) {
+    console.error("XX== Error setting up meeting routes ==XX:", error);
+}
+
 app.get('/', (req, res) => {
     res.send("Server is running");
 });
-

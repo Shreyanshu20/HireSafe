@@ -1,10 +1,11 @@
-import { Schema } from "mongoose";
-
+import mongoose from 'mongoose';
+const { Schema } = mongoose;
 
 const meetingSchema = new Schema({
     user_id: {
         type: Schema.Types.ObjectId,
         ref: 'User',
+        required: true
     },
     meeting_code: {
         type: String,
@@ -19,7 +20,6 @@ const meetingSchema = new Schema({
 }, {
     timestamps: true
 });
-
 
 const Meeting = mongoose.model('Meeting', meetingSchema);
 
