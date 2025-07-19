@@ -15,12 +15,29 @@ const app = express();
 const server = createServer(app);
 const io = connectToSocket(server);
 
+const allowedOrigins = [
+    'http://localhost:5173',
+    'https://hiresafe.onrender.com',
+    process.env.FRONTEND_URL
+].filter(Boolean);
+
 app.use(cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+
+        if (allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+
+        return callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization']
+    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization', 'Cookie'],
+    optionsSuccessStatus: 200
 }));
+
+app.options('*', cors());
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -34,8 +51,8 @@ const main = async () => {
             console.error("Error connecting to MongoDB:", e);
         });
 
-        server.listen(process.env.PORT, () => {
-            console.log(`Server is running on port ${process.env.PORT}`);
+        server.listen(process.env.PORT || 9000, () => {
+            console.log(`Server is running on port ${process.env.PORT || 9000}`);
         });
     } catch (error) {
         console.error("Error in main function:", error);

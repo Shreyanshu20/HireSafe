@@ -197,7 +197,7 @@ export default function Meetings() {
 
     let dst = oscillator.connect(ctx.createMediaStreamDestination());
     oscillator.start();
-    ctx.resume(); 
+    ctx.resume();
     return Object.assign(dst.stream.getAudioTracks()[0], { enabled: false });
   };
 
@@ -459,6 +459,14 @@ export default function Meetings() {
     }
   };
 
+  let handleVideo = () => {
+    setVideo(!video);
+  };
+
+  let handleAudio = () => {
+    setAudio(!audio);
+  };
+
   return (
     <>
       {askForMeetingCode ? (
@@ -500,6 +508,12 @@ export default function Meetings() {
         <>
           <div>
             <video ref={localVideoRef} autoPlay muted></video>
+            <br />
+            <button onClick={handleVideo}>Video</button>
+            <button onClick={handleAudio}>Audio</button>
+            <button>Chat</button>
+            <button>Screen Share</button>
+            <button>End Call</button>
 
             {videos.map((video) => (
               <div key={video.socketId}>
