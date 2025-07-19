@@ -4,22 +4,21 @@ import { getUserProfile, changePassword, deleteAccount, logActivity, getActiviti
 
 const router = Router();
 
-router.use(userAuth);
 
 //get user profile
-router.get('/profile', getUserProfile);
+router.get('/profile', userAuth, getUserProfile);
 
 //change password
-router.post('/change-password', changePassword)
+router.post('/change-password', userAuth, changePassword)
 
 //delete account
-router.delete('/delete-account', deleteAccount)
+router.delete('/delete-account', userAuth, deleteAccount)
 
 //log activities
-router.post('/log-activity', logActivity);
+router.post('/log-activity', userAuth, logActivity);
 
 //get activities
-router.get('/activities', getActivities);
+router.get('/activities', userAuth, getActivities);
 
 export default router;
 

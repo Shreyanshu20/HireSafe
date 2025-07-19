@@ -15,29 +15,13 @@ const app = express();
 const server = createServer(app);
 const io = connectToSocket(server);
 
-const allowedOrigins = [
-    'http://localhost:5173',
-    'https://hiresafe.onrender.com',
-    process.env.FRONTEND_URL
-].filter(Boolean);
-
 app.use(cors({
-    origin: (origin, callback) => {
-        if (!origin) return callback(null, true);
-
-        if (allowedOrigins.includes(origin)) {
-            return callback(null, true);
-        }
-
-        return callback(new Error('Not allowed by CORS'));
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization', 'Cookie'],
-    optionsSuccessStatus: 200
+    origin: [
+        'http://localhost:5173',
+        'https://hiresafe.onrender.com'
+    ],
+    credentials: true
 }));
-
-app.options('*', cors());
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
