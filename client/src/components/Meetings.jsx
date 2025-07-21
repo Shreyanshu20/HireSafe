@@ -39,8 +39,8 @@ export default function Meetings() {
   let [audioAvailable, setAudioAvailable] = useState(true);
   let [video, setVideo] = useState([]);
   let [audio, setAudio] = useState();
-  let [screen, setScreen] = useState();
-  let [showModal, setShowModal] = useState();
+  let [screen, setScreen] = useState(false);
+  let [showModal, setShowModal] = useState(false);
   let [screenAvailable, setScreenAvailable] = useState();
   let [messages, setMessages] = useState([]);
   let [message, setMessage] = useState("");
@@ -233,13 +233,80 @@ export default function Meetings() {
     }
   };
 
+  let getDisplayMedia = () => {
+    if (screen) {
+      if (navigator.mediaDevices.getDisplayMedia) {
+        navigator.mediaDevices
+          .getDisplayMedia({ video: true, audio: true })
+          .then(getDisplayMediaSuccess)
+          .then((stream) => {})
+          .catch((error) => {
+            console.error("Error accessing display media:", error);
+            toast.error("Failed to access display media. Please try again.");
+            setScreen(false);
+          });
+      }
+    } else {
+      getUserMedia();
+    }
+  };
+
+  let getDisplayMediaSuccess = (stream) => {
+    try {
+      window.localStream.getTracks().forEach((track) => track.stop());
+    } catch (error) {
+      console.error("Error stopping previous tracks:", error);
+      toast.error("Failed to stop previous media tracks. Please try again.");
+    }
+
+    window.localStream = stream;
+    localVideoRef.current.srcObject = stream;
+
+    for (let id in connections) {
+      if (id === socketIdRef.current) continue;
+
+      connections[id].addStream(window.localStream);
+
+      connections[id].createOffer().then((description) => {
+        connections[id]
+          .setLocalDescription(description)
+          .then(() => {
+            socketRef.current.emit(
+              "signal",
+              id,
+              JSON.stringify({ sdp: connections[id].localDescription })
+            );
+          })
+          .catch((error) => {
+            console.error("Error setting local description:", error);
+            toast.error("Failed to set local description. Please try again.");
+          });
+      });
+    }
+
+    stream.getTracks().forEach(
+      (track) =>
+        (track.onended = () => {
+          setScreen(false);
+
+          try {
+            let tracks = localVideoRef.current.srcObject.getTracks();
+            tracks.forEach((track) => track.stop());
+          } catch (error) {
+            console.error("Error stopping media tracks:", error);
+            toast.error("Failed to stop media tracks. Please try again.");
+          }
+
+          getUserMedia();
+        })
+    );
+  };
+
   useEffect(() => {
     if (video !== undefined && audio !== undefined) {
       getUserMedia();
     }
   }, [audio, video]);
-
-  let addMessage = () => {};
 
   let gotMessageFromServer = (fromId, message) => {
     var signal = JSON.parse(message);
@@ -467,6 +534,57 @@ export default function Meetings() {
     setAudio(!audio);
   };
 
+  useEffect(() => {
+    if (screen !== undefined) {
+      getDisplayMedia();
+    }
+  }, [screen]);
+
+  let handleScreen = () => {
+    setScreen(!screen);
+  };
+
+  let handleEndCall = () => {
+    try {
+      let tracks = localVideoRef.current.srcObject.getTracks();
+      tracks.forEach((track) => track.stop());
+    } catch (error) {
+      console.error("Error stopping media tracks:", error);
+      toast.error("Failed to stop media tracks. Please try again.");
+    }
+    window.location.href = "/";
+  };
+
+  let openChat = () => {
+    setShowModal(true);
+    setNewMessage(0);
+  };
+
+  let closeChat = () => {
+    setShowModal(false);
+  };
+
+  let handleMessage = (e) => {
+    setMessage(e.target.value);
+  };
+
+  const addMessage = (data, sender, socketIdSender) => {
+    setMessages((prevMessages) => [
+      ...prevMessages,
+      { sender: sender, data: data },
+    ]);
+    if (socketIdSender !== socketIdRef.current) {
+      setNewMessage((prevNewMessage) => prevNewMessage + 1);
+    }
+  };
+
+  let sendMessage = () => {
+    if (message.trim()) {
+      socketRef.current.emit("chat-message", message, "You");
+      setMessage("");
+    }
+  };
+
   return (
     <>
       {askForMeetingCode ? (
@@ -498,7 +616,12 @@ export default function Meetings() {
           )}
 
           <div>
-            <video ref={localVideoRef} autoPlay muted></video>
+            <video
+              ref={localVideoRef}
+              autoPlay
+              muted
+              className="w-[300px] h-[200px]"
+            ></video>
           </div>
           <button onClick={connectToMeeting} disabled={isValidatingCode}>
             {isValidatingCode ? "Validating..." : "Connect"}
@@ -507,13 +630,22 @@ export default function Meetings() {
       ) : (
         <>
           <div>
-            <video ref={localVideoRef} autoPlay muted></video>
+            <video
+              ref={localVideoRef}
+              autoPlay
+              muted
+              className="w-[400px] h-[300px]"
+            ></video>
             <br />
             <button onClick={handleVideo}>Video</button>
             <button onClick={handleAudio}>Audio</button>
-            <button>Chat</button>
-            <button>Screen Share</button>
-            <button>End Call</button>
+            <button onClick={openChat}>
+              Chat {newMessage > 0 && `(${newMessage})`}
+            </button>
+            <button onClick={handleScreen}>
+              {screen ? "Stop Share" : "Screen Share"}
+            </button>
+            <button onClick={handleEndCall}>End Call</button>
 
             {videos.map((video) => (
               <div key={video.socketId}>
@@ -526,10 +658,64 @@ export default function Meetings() {
                     }
                   }}
                   autoPlay
+                  className="w-[400px] h-[300px]"
                 ></video>
               </div>
             ))}
           </div>
+=
+          {showModal && (
+            <div className="fixed top-0 left-0 w-full h-full bg-black bg-opacity-50 flex justify-center items-center z-[1000]">
+              <div className="bg-white w-[400px] h-[500px] rounded-lg flex flex-col">
+                <div className="p-[15px] border-b border-gray-300 flex justify-between items-center">
+                  <h3 className="m-0">Chat</h3>
+                  <button
+                    onClick={closeChat}
+                    className="bg-none border-none text-xl cursor-pointer"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div className="flex-1 p-[10px] overflow-y-auto max-h-[350px]">
+                  {messages.length === 0 ? (
+                    <p className="text-center text-gray-600">No messages yet</p>
+                  ) : (
+                    messages.map((msg, index) => (
+                      <div
+                        key={index}
+                        className="mb-[10px] p-2 bg-gray-100 rounded"
+                      >
+                        <strong>{msg.sender}: </strong>
+                        <span>{msg.data}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="p-[15px] border-t border-gray-300 flex gap-[10px]">
+                  <input
+                    type="text"
+                    value={message}
+                    onChange={handleMessage}
+                    placeholder="Type a message..."
+                    className="flex-1 p-2 border border-gray-300 rounded"
+                    onClick={(e) => {
+                      if (e.key === "Enter") {
+                        sendMessage();
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={sendMessage}
+                    className="px-4 py-2 bg-blue-600 text-white border-none rounded cursor-pointer"
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </>
