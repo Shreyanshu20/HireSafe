@@ -37,8 +37,8 @@ export default function Meetings() {
 
   let [videoAvailable, setVideoAvailable] = useState(true);
   let [audioAvailable, setAudioAvailable] = useState(true);
-  let [video, setVideo] = useState([]);
-  let [audio, setAudio] = useState();
+  let [video, setVideo] = useState(false);
+  let [audio, setAudio] = useState(false);
   let [screen, setScreen] = useState(false);
   let [showModal, setShowModal] = useState(false);
   let [screenAvailable, setScreenAvailable] = useState();
@@ -53,6 +53,10 @@ export default function Meetings() {
   const videoRef = useRef();
   let [videos, setVideos] = useState([]);
 
+  // Separate streams for camera and screen
+  let [cameraStream, setCameraStream] = useState(null);
+  let [screenStream, setScreenStream] = useState(null);
+
   const getPermissions = async () => {
     try {
       const videoPermission = await navigator.mediaDevices.getUserMedia({
@@ -61,6 +65,7 @@ export default function Meetings() {
 
       if (videoPermission) {
         setVideoAvailable(true);
+        videoPermission.getTracks().forEach((track) => track.stop());
       } else {
         setVideoAvailable(false);
       }
@@ -71,6 +76,7 @@ export default function Meetings() {
 
       if (audioPermission) {
         setAudioAvailable(true);
+        audioPermission.getTracks().forEach((track) => track.stop());
       } else {
         setAudioAvailable(false);
       }
@@ -81,6 +87,7 @@ export default function Meetings() {
         setScreenAvailable(false);
       }
 
+      // Get initial stream for preview
       if (videoAvailable || audioAvailable) {
         const userMediaStream = await navigator.mediaDevices.getUserMedia({
           video: videoAvailable,
@@ -88,6 +95,7 @@ export default function Meetings() {
         });
 
         if (userMediaStream) {
+          setCameraStream(userMediaStream);
           window.localStream = userMediaStream;
 
           if (localVideoRef.current) {
@@ -107,88 +115,87 @@ export default function Meetings() {
     getPermissions();
   }, []);
 
-  let getUserMediaSuccess = (stream) => {
-    try {
-      if (window.localStream && window.localStream.getTracks) {
-        window.localStream.getTracks().forEach((track) => track.stop());
-      }
-    } catch (error) {
-      console.error("Error stopping previous tracks:", error);
-      toast.error("Failed to stop previous media tracks. Please try again.");
-    }
-
-    window.localStream = stream;
-    localVideoRef.current.srcObject = stream;
-
+  // Function to update the stream sent to peers
+  const updatePeerConnections = (streamToSend) => {
     for (let id in connections) {
       if (id === socketIdRef.current) {
         continue;
       }
 
-      connections[id].addStream(window.localStream);
-
-      connections[id].createOffer().then((description) => {
-        connections[id]
-          .setLocalDescription(description)
-          .then(() => {
-            socketIdRef.current.emit(
-              "signal",
-              id,
-              JSON.stringify({ sdp: connections[id].localDescription })
-            );
-          })
-          .catch((error) => {
-            console.error("Error setting local description:", error);
-            toast.error("Failed to set local description. Please try again.");
-          });
+      // Remove old stream
+      const senders = connections[id].getSenders();
+      senders.forEach(sender => {
+        if (sender.track) {
+          connections[id].removeTrack(sender);
+        }
       });
+
+      // Add new stream
+      if (streamToSend && streamToSend.getTracks) {
+        streamToSend.getTracks().forEach(track => {
+          connections[id].addTrack(track, streamToSend);
+        });
+
+        connections[id].createOffer().then((description) => {
+          connections[id]
+            .setLocalDescription(description)
+            .then(() => {
+              socketRef.current.emit(
+                "signal",
+                id,
+                JSON.stringify({ sdp: connections[id].localDescription })
+              );
+            })
+            .catch((error) => {
+              console.error("Error setting local description:", error);
+              toast.error("Failed to set local description. Please try again.");
+            });
+        });
+      }
     }
+  };
+
+  let getUserMediaSuccess = (stream) => {
+    try {
+      // Stop previous camera stream if it exists
+      if (cameraStream && cameraStream.getTracks) {
+        cameraStream.getTracks().forEach((track) => track.stop());
+      }
+    } catch (error) {
+      console.error("Error stopping previous camera tracks:", error);
+    }
+
+    setCameraStream(stream);
+
+    // Always show camera in local video ref
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = stream;
+    }
+
+    // Determine which stream to send to peers
+    const streamToSend = screen && screenStream ? screenStream : stream;
+    window.localStream = streamToSend;
+
+    updatePeerConnections(streamToSend);
 
     stream.getTracks().forEach(
       (track) =>
         (track.onended = () => {
           setVideo(false);
           setAudio(false);
-
-          try {
-            let tracks = localVideoRef.current.srcObject.getTracks();
-            tracks.forEach((track) => track.stop());
-          } catch (error) {
-            console.error("Error stopping media tracks:", error);
-            toast.error("Failed to stop media tracks. Please try again.");
-          }
+          setCameraStream(null);
 
           let blackSilence = (...args) =>
             new MediaStream([black(...args), silence()]);
-          window.localStream = blackSilence();
-          localVideoRef.current.srcObject = window.localStream;
-
-          for (let id in connections) {
-            connections[id].addStream(window.localStream);
-            connections[id]
-              .createOffer()
-              .then((description) => {
-                connections[id]
-                  .setLocalDescription(description)
-                  .then(() => {
-                    socketRef.current.emit(
-                      "signal",
-                      id,
-                      JSON.stringify({ sdp: connections[id].localDescription })
-                    );
-                  })
-                  .catch((error) => {
-                    console.error("Error sending signal:", error);
-                    toast.error("Failed to send signal. Please try again.");
-                  });
-              })
-              .catch((error) => {
-                console.error("Error setting local description:", error);
-                toast.error(
-                  "Failed to set local description. Please try again."
-                );
-              });
+          
+          const fallbackStream = screen && screenStream ? screenStream : blackSilence();
+          window.localStream = fallbackStream;
+          
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = blackSilence();
           }
+
+          updatePeerConnections(fallbackStream);
         })
     );
   };
@@ -219,15 +226,30 @@ export default function Meetings() {
       navigator.mediaDevices
         .getUserMedia({ video: video, audio: audio })
         .then(getUserMediaSuccess)
-        .then((stream) => {})
         .catch((error) => {
           console.error("Error accessing media devices:", error);
           toast.error("Failed to access media devices. Please try again.");
         });
     } else {
       try {
-        let tracks = localVideoRef.current.srcObject.getTracks();
-        tracks.forEach((track) => track.stop());
+        if (cameraStream && cameraStream.getTracks) {
+          cameraStream.getTracks().forEach((track) => track.stop());
+        }
+        setCameraStream(null);
+
+        // If screen sharing is active, keep it; otherwise use black silence
+        const streamToSend = screen && screenStream ? screenStream : (() => {
+          let blackSilence = (...args) => new MediaStream([black(...args), silence()]);
+          return blackSilence();
+        })();
+        
+        window.localStream = streamToSend;
+        
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = streamToSend;
+        }
+
+        updatePeerConnections(streamToSend);
       } catch (error) {
         console.error("Error stopping media tracks:", error);
         toast.error("Failed to stop media tracks. Please try again.");
@@ -241,7 +263,6 @@ export default function Meetings() {
         navigator.mediaDevices
           .getDisplayMedia({ video: true, audio: true })
           .then(getDisplayMediaSuccess)
-          .then((stream) => {})
           .catch((error) => {
             console.error("Error accessing display media:", error);
             toast.error("Failed to access display media. Please try again.");
@@ -249,59 +270,49 @@ export default function Meetings() {
           });
       }
     } else {
-      getUserMedia();
+      // Stop screen sharing
+      if (screenStream && screenStream.getTracks) {
+        screenStream.getTracks().forEach((track) => track.stop());
+      }
+      setScreenStream(null);
+
+      // Send camera stream to peers if available
+      const streamToSend = cameraStream || (() => {
+        let blackSilence = (...args) => new MediaStream([black(...args), silence()]);
+        return blackSilence();
+      })();
+      
+      window.localStream = streamToSend;
+      updatePeerConnections(streamToSend);
     }
   };
 
   let getDisplayMediaSuccess = (stream) => {
-    try {
-      if (window.localStream && window.localStream.getTracks) {
-        window.localStream.getTracks().forEach((track) => track.stop());
-      }
-    } catch (error) {
-      console.error("Error stopping previous tracks:", error);
-      toast.error("Failed to stop previous media tracks. Please try again.");
-    }
-
+    setScreenStream(stream);
+    
+    // Send screen stream to peers
     window.localStream = stream;
-    localVideoRef.current.srcObject = stream;
+    updatePeerConnections(stream);
 
-    for (let id in connections) {
-      if (id === socketIdRef.current) continue;
-
-      connections[id].addStream(window.localStream);
-
-      connections[id].createOffer().then((description) => {
-        connections[id]
-          .setLocalDescription(description)
-          .then(() => {
-            socketRef.current.emit(
-              "signal",
-              id,
-              JSON.stringify({ sdp: connections[id].localDescription })
-            );
-          })
-          .catch((error) => {
-            console.error("Error setting local description:", error);
-            toast.error("Failed to set local description. Please try again.");
-          });
-      });
+    // Keep camera in local video ref if available
+    if (localVideoRef.current && cameraStream) {
+      localVideoRef.current.srcObject = cameraStream;
     }
 
     stream.getTracks().forEach(
       (track) =>
         (track.onended = () => {
           setScreen(false);
+          setScreenStream(null);
 
-          try {
-            let tracks = localVideoRef.current.srcObject.getTracks();
-            tracks.forEach((track) => track.stop());
-          } catch (error) {
-            console.error("Error stopping media tracks:", error);
-            toast.error("Failed to stop media tracks. Please try again.");
-          }
-
-          getUserMedia();
+          // Switch back to camera stream
+          const streamToSend = cameraStream || (() => {
+            let blackSilence = (...args) => new MediaStream([black(...args), silence()]);
+            return blackSilence();
+          })();
+          
+          window.localStream = streamToSend;
+          updatePeerConnections(streamToSend);
         })
     );
   };
@@ -357,7 +368,10 @@ export default function Meetings() {
   };
 
   let connectToSocketServer = () => {
-    socketRef.current = io.connect(server_url, { secure: false });
+    socketRef.current = io.connect(server_url, {
+      secure: false,
+      withCredentials: true,
+    });
 
     socketRef.current.on("signal", gotMessageFromServer);
 
@@ -388,9 +402,9 @@ export default function Meetings() {
           };
 
           connections[socketListId].onaddstream = (event) => {
-            let videoExists = videoRef.current.find(
-              (video) => video.socketId === socketListId
-            );
+            let videoExists =
+              videoRef.current &&
+              videoRef.current.find((video) => video.socketId === socketListId);
 
             if (videoExists) {
               setVideos((videos) => {
@@ -419,23 +433,32 @@ export default function Meetings() {
           };
 
           if (window.localStream !== undefined && window.localStream !== null) {
-            connections[socketListId].addStream(window.localStream);
+            // Use addTrack instead of addStream for better control
+            window.localStream.getTracks().forEach(track => {
+              connections[socketListId].addTrack(track, window.localStream);
+            });
           } else {
             let blackSilence = (...args) =>
               new MediaStream([black(...args), silence()]);
             window.localStream = blackSilence();
-            connections[socketListId].addStream(window.localStream);
+            window.localStream.getTracks().forEach(track => {
+              connections[socketListId].addTrack(track, window.localStream);
+            });
           }
         });
 
         if (id === socketIdRef.current) {
           for (let id2 in connections) {
-            if (id2 === socketRef.current) {
+            if (id2 === socketIdRef.current) {
               continue;
             }
 
             try {
-              connections[id2].addStream(window.localStream);
+              if (window.localStream && window.localStream.getTracks) {
+                window.localStream.getTracks().forEach(track => {
+                  connections[id2].addTrack(track, window.localStream);
+                });
+              }
             } catch (error) {
               console.error("Error adding stream to connection:", error);
               toast.error(
@@ -550,8 +573,15 @@ export default function Meetings() {
 
   let handleEndCall = () => {
     try {
-      let tracks = localVideoRef.current.srcObject.getTracks();
-      tracks.forEach((track) => track.stop());
+      if (cameraStream && cameraStream.getTracks) {
+        cameraStream.getTracks().forEach((track) => track.stop());
+      }
+      if (screenStream && screenStream.getTracks) {
+        screenStream.getTracks().forEach((track) => track.stop());
+      }
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
     } catch (error) {
       console.error("Error stopping media tracks:", error);
       toast.error("Failed to stop media tracks. Please try again.");
@@ -605,7 +635,10 @@ export default function Meetings() {
           {meetingState === "create" ? (
             <div>
               <h2>Create a meeting</h2>
-              <p>Meeting Code: {meetingCode}</p>
+              <div>
+                <p>Meeting Code:</p>
+                <p>{meetingCode || "Generating..."}</p>
+              </div>
             </div>
           ) : (
             <div>
@@ -614,7 +647,8 @@ export default function Meetings() {
                 type="text"
                 placeholder="Enter meeting code"
                 value={meetingCode || ""}
-                onChange={(e) => setMeetingCode(e.target.value)}
+                onChange={(e) => setMeetingCode(e.target.value.toUpperCase())}
+                className="border border-gray-300 p-2 rounded mr-2"
               />
             </div>
           )}
@@ -624,32 +658,78 @@ export default function Meetings() {
               ref={localVideoRef}
               autoPlay
               muted
-              className="w-[300px] h-[200px]"
+              className="w-[300px] h-[200px] bg-gray-800 rounded"
             ></video>
           </div>
-          <button onClick={connectToMeeting} disabled={isValidatingCode}>
+          <button
+            onClick={connectToMeeting}
+            disabled={isValidatingCode}
+            className="bg-blue-500 text-white px-4 py-2 rounded mt-2 disabled:bg-gray-400"
+          >
             {isValidatingCode ? "Validating..." : "Connect"}
           </button>
         </>
       ) : (
         <>
+          <div>{meetingCode}</div>
+
           <div>
+            {/* Your camera feed - always shows camera */}
             <video
               ref={localVideoRef}
               autoPlay
               muted
-              className="w-[400px] h-[300px]"
+              className="w-[400px] h-[300px] bg-gray-800 rounded"
             ></video>
+
+            {/* Screen share feed - only shows when screen sharing */}
+            {screen && screenStream && (
+              <div className="mt-4">
+                <h3>Your Screen Share</h3>
+                <video
+                  ref={(ref) => {
+                    if (ref && screenStream) {
+                      ref.srcObject = screenStream;
+                    }
+                  }}
+                  autoPlay
+                  muted
+                  className="w-[400px] h-[300px] bg-gray-800 rounded"
+                ></video>
+              </div>
+            )}
+
             <br />
-            <button onClick={handleVideo}>Video</button>
-            <button onClick={handleAudio}>Audio</button>
-            <button onClick={openChat}>
+            <button
+              onClick={handleVideo}
+              className="mr-2 p-2 bg-blue-500 text-white rounded"
+            >
+              {video ? "Video On" : "Video Off"}
+            </button>
+            <button
+              onClick={handleAudio}
+              className="mr-2 p-2 bg-green-500 text-white rounded"
+            >
+              {audio ? "Audio On" : "Audio Off"}
+            </button>
+            <button
+              onClick={openChat}
+              className="mr-2 p-2 bg-purple-500 text-white rounded"
+            >
               Chat {newMessage > 0 && `(${newMessage})`}
             </button>
-            <button onClick={handleScreen}>
+            <button
+              onClick={handleScreen}
+              className="mr-2 p-2 bg-orange-500 text-white rounded"
+            >
               {screen ? "Stop Share" : "Screen Share"}
             </button>
-            <button onClick={handleEndCall}>End Call</button>
+            <button
+              onClick={handleEndCall}
+              className="mr-2 p-2 bg-red-500 text-white rounded"
+            >
+              End Call
+            </button>
 
             {videos.map((video) => (
               <div key={video.socketId}>
@@ -662,12 +742,12 @@ export default function Meetings() {
                     }
                   }}
                   autoPlay
-                  className="w-[400px] h-[300px]"
+                  className="w-[400px] h-[300px] bg-gray-800 rounded"
                 ></video>
               </div>
             ))}
           </div>
-          =
+
           {showModal && (
             <div className="fixed top-0 left-0 w-full h-full bg-black bg-opacity-50 flex justify-center items-center z-[1000]">
               <div className="bg-white w-[400px] h-[500px] rounded-lg flex flex-col">
