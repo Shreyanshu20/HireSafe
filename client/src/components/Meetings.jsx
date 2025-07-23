@@ -109,7 +109,9 @@ export default function Meetings() {
 
   let getUserMediaSuccess = (stream) => {
     try {
-      window.localStream.getTracks().forEach((track) => track.stop());
+      if (window.localStream && window.localStream.getTracks) {
+        window.localStream.getTracks().forEach((track) => track.stop());
+      }
     } catch (error) {
       console.error("Error stopping previous tracks:", error);
       toast.error("Failed to stop previous media tracks. Please try again.");
@@ -253,7 +255,9 @@ export default function Meetings() {
 
   let getDisplayMediaSuccess = (stream) => {
     try {
-      window.localStream.getTracks().forEach((track) => track.stop());
+      if (window.localStream && window.localStream.getTracks) {
+        window.localStream.getTracks().forEach((track) => track.stop());
+      }
     } catch (error) {
       console.error("Error stopping previous tracks:", error);
       toast.error("Failed to stop previous media tracks. Please try again.");
@@ -663,7 +667,7 @@ export default function Meetings() {
               </div>
             ))}
           </div>
-=
+          =
           {showModal && (
             <div className="fixed top-0 left-0 w-full h-full bg-black bg-opacity-50 flex justify-center items-center z-[1000]">
               <div className="bg-white w-[400px] h-[500px] rounded-lg flex flex-col">
@@ -700,7 +704,7 @@ export default function Meetings() {
                     onChange={handleMessage}
                     placeholder="Type a message..."
                     className="flex-1 p-2 border border-gray-300 rounded"
-                    onClick={(e) => {
+                    onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         sendMessage();
                       }
