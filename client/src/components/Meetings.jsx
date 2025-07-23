@@ -3,6 +3,7 @@ import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import io from "socket.io-client";
 import axios from "axios";
+import { useAuth } from "../context/AuthContext";
 
 const server_url = import.meta.env.VITE_BACKEND_URL || "http://localhost:9000";
 
@@ -31,6 +32,8 @@ const client = axios.create({
 });
 
 export default function Meetings() {
+  const { isAuthenticated, isLoading } = useAuth();
+  
   var socketRef = useRef();
   let socketIdRef = useRef();
   let localVideoRef = useRef();
@@ -49,6 +52,7 @@ export default function Meetings() {
   let [meetingState, setMeetingState] = useState("join");
   let [askForMeetingCode, setAskForMeetingCode] = useState(true);
   let [isValidatingCode, setIsValidatingCode] = useState(false);
+  let [isCreatingMeeting, setIsCreatingMeeting] = useState(false);
 
   const videoRef = useRef();
   let [videos, setVideos] = useState([]);
@@ -56,6 +60,14 @@ export default function Meetings() {
   // Separate streams for camera and screen
   let [cameraStream, setCameraStream] = useState(null);
   let [screenStream, setScreenStream] = useState(null);
+
+  // Check authentication on component mount
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      toast.error("Please log in to access meetings");
+      return;
+    }
+  }, [isAuthenticated, isLoading]);
 
   const getPermissions = async () => {
     try {
@@ -112,8 +124,10 @@ export default function Meetings() {
   };
 
   useEffect(() => {
-    getPermissions();
-  }, []);
+    if (isAuthenticated) {
+      getPermissions();
+    }
+  }, [isAuthenticated]);
 
   // Function to update the stream sent to peers
   const updatePeerConnections = (streamToSend) => {
@@ -157,7 +171,6 @@ export default function Meetings() {
 
   let getUserMediaSuccess = (stream) => {
     try {
-      // Stop previous camera stream if it exists
       if (cameraStream && cameraStream.getTracks) {
         cameraStream.getTracks().forEach((track) => track.stop());
       }
@@ -167,12 +180,10 @@ export default function Meetings() {
 
     setCameraStream(stream);
 
-    // Always show camera in local video ref
     if (localVideoRef.current) {
       localVideoRef.current.srcObject = stream;
     }
 
-    // Determine which stream to send to peers
     const streamToSend = screen && screenStream ? screenStream : stream;
     window.localStream = streamToSend;
 
@@ -237,7 +248,6 @@ export default function Meetings() {
         }
         setCameraStream(null);
 
-        // If screen sharing is active, keep it; otherwise use black silence
         const streamToSend = screen && screenStream ? screenStream : (() => {
           let blackSilence = (...args) => new MediaStream([black(...args), silence()]);
           return blackSilence();
@@ -270,13 +280,11 @@ export default function Meetings() {
           });
       }
     } else {
-      // Stop screen sharing
       if (screenStream && screenStream.getTracks) {
         screenStream.getTracks().forEach((track) => track.stop());
       }
       setScreenStream(null);
 
-      // Send camera stream to peers if available
       const streamToSend = cameraStream || (() => {
         let blackSilence = (...args) => new MediaStream([black(...args), silence()]);
         return blackSilence();
@@ -290,11 +298,9 @@ export default function Meetings() {
   let getDisplayMediaSuccess = (stream) => {
     setScreenStream(stream);
     
-    // Send screen stream to peers
     window.localStream = stream;
     updatePeerConnections(stream);
 
-    // Keep camera in local video ref if available
     if (localVideoRef.current && cameraStream) {
       localVideoRef.current.srcObject = cameraStream;
     }
@@ -305,7 +311,6 @@ export default function Meetings() {
           setScreen(false);
           setScreenStream(null);
 
-          // Switch back to camera stream
           const streamToSend = cameraStream || (() => {
             let blackSilence = (...args) => new MediaStream([black(...args), silence()]);
             return blackSilence();
@@ -433,7 +438,6 @@ export default function Meetings() {
           };
 
           if (window.localStream !== undefined && window.localStream !== null) {
-            // Use addTrack instead of addStream for better control
             window.localStream.getTracks().forEach(track => {
               connections[socketListId].addTrack(track, window.localStream);
             });
@@ -496,29 +500,54 @@ export default function Meetings() {
   };
 
   const handleCreateMeeting = async () => {
-    const newMeetingCode = generateMeetingCode();
+    if (!isAuthenticated) {
+      toast.error("Please log in to create a meeting");
+      return;
+    }
 
-    try {
-      const response = await client.post("/meeting/create", {
-        meeting_code: newMeetingCode,
-      });
+    setIsCreatingMeeting(true);
+    let attempts = 0;
+    const maxAttempts = 5;
 
-      if (response.data.success) {
-        setMeetingCode(newMeetingCode);
-        setMeetingState("create");
-        toast.success("Meeting created successfully!");
-      }
-    } catch (error) {
-      console.error("Error creating meeting:", error);
-      if (error.response?.data?.message) {
-        toast.error(error.response.data.message);
-      } else {
-        toast.error("Failed to create meeting. Please try again.");
+    while (attempts < maxAttempts) {
+      const newMeetingCode = generateMeetingCode();
+      
+      try {
+        const response = await client.post("/meeting/create", {
+          meeting_code: newMeetingCode,
+        });
+
+        if (response.data.success) {
+          setMeetingCode(newMeetingCode);
+          setMeetingState("create");
+          toast.success("Meeting created successfully!");
+          break;
+        }
+      } catch (error) {
+        console.error("Error creating meeting:", error);
+        if (error.response?.data?.message?.includes("already exists")) {
+          attempts++;
+          if (attempts >= maxAttempts) {
+            toast.error("Failed to generate unique meeting code. Please try again.");
+          }
+          continue;
+        } else {
+          const errorMessage = error.response?.data?.message || "Failed to create meeting. Please try again.";
+          toast.error(errorMessage);
+          break;
+        }
       }
     }
+    
+    setIsCreatingMeeting(false);
   };
 
   const connectToMeeting = async () => {
+    if (!isAuthenticated) {
+      toast.error("Please log in to join a meeting");
+      return;
+    }
+
     if (!meetingCode) {
       toast.error("Please enter a meeting code");
       return;
@@ -543,11 +572,8 @@ export default function Meetings() {
       }
     } catch (error) {
       console.error("Error validating meeting code:", error);
-      if (error.response?.data?.message) {
-        toast.error(error.response.data.message);
-      } else {
-        toast.error("Failed to validate meeting code. Please try again.");
-      }
+      const errorMessage = error.response?.data?.message || "Failed to validate meeting code. Please try again.";
+      toast.error(errorMessage);
     } finally {
       setIsValidatingCode(false);
     }
@@ -619,29 +645,59 @@ export default function Meetings() {
     }
   };
 
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-xl">Loading...</div>
+      </div>
+    );
+  }
+
+  // Show login message if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl mb-4">Authentication Required</h1>
+          <p>Please log in to access meetings.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       {askForMeetingCode ? (
         <>
           <h1>Meetings</h1>
 
-          <button onClick={handleCreateMeeting}>Create a Meeting</button>
+          <button 
+            onClick={handleCreateMeeting}
+            disabled={isCreatingMeeting}
+            className="bg-green-500 text-white px-4 py-2 rounded mr-2 disabled:bg-gray-400"
+          >
+            {isCreatingMeeting ? "Creating..." : "Create a Meeting"}
+          </button>
 
-          <button onClick={() => setMeetingState("join")}>
+          <button 
+            onClick={() => setMeetingState("join")}
+            className="bg-blue-500 text-white px-4 py-2 rounded"
+          >
             Join a Meeting
           </button>
           <br />
 
           {meetingState === "create" ? (
-            <div>
+            <div className="mt-4">
               <h2>Create a meeting</h2>
               <div>
                 <p>Meeting Code:</p>
-                <p>{meetingCode || "Generating..."}</p>
+                <p className="font-bold text-lg">{meetingCode || "Generating..."}</p>
               </div>
             </div>
           ) : (
-            <div>
+            <div className="mt-4">
               <h2>Join a meeting</h2>
               <input
                 type="text"
@@ -649,11 +705,12 @@ export default function Meetings() {
                 value={meetingCode || ""}
                 onChange={(e) => setMeetingCode(e.target.value.toUpperCase())}
                 className="border border-gray-300 p-2 rounded mr-2"
+                maxLength="9"
               />
             </div>
           )}
 
-          <div>
+          <div className="mt-4">
             <video
               ref={localVideoRef}
               autoPlay
@@ -663,7 +720,7 @@ export default function Meetings() {
           </div>
           <button
             onClick={connectToMeeting}
-            disabled={isValidatingCode}
+            disabled={isValidatingCode || (meetingState === "join" && !meetingCode)}
             className="bg-blue-500 text-white px-4 py-2 rounded mt-2 disabled:bg-gray-400"
           >
             {isValidatingCode ? "Validating..." : "Connect"}
@@ -671,10 +728,11 @@ export default function Meetings() {
         </>
       ) : (
         <>
-          <div>{meetingCode}</div>
+          <div className="mb-4">
+            <strong>Meeting Code: {meetingCode}</strong>
+          </div>
 
           <div>
-            {/* Your camera feed - always shows camera */}
             <video
               ref={localVideoRef}
               autoPlay
@@ -682,7 +740,6 @@ export default function Meetings() {
               className="w-[400px] h-[300px] bg-gray-800 rounded"
             ></video>
 
-            {/* Screen share feed - only shows when screen sharing */}
             {screen && screenStream && (
               <div className="mt-4">
                 <h3>Your Screen Share</h3>
@@ -774,8 +831,8 @@ export default function Meetings() {
                         <span>{msg.data}</span>
                       </div>
                     ))
-                  )}
-                </div>
+                  )
+                }</div>
 
                 <div className="p-[15px] border-t border-gray-300 flex gap-[10px]">
                   <input
