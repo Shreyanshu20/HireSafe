@@ -3,10 +3,23 @@ import { User } from '../model/user.model.js';
 
 export const userAuth = async (req, res, next) => {
     try {
-        const token = req.cookies.userToken || req.cookies.token;
+        // Check multiple token sources for mobile compatibility
+        const token = req.cookies.userToken || 
+                     req.cookies.token || 
+                     req.headers.authorization?.split(' ')[1] || // Bearer token
+                     req.headers['x-auth-token']; // Custom header
+
+        console.log('Token sources:', {
+            cookie: !!req.cookies.userToken,
+            bearer: !!req.headers.authorization,
+            custom: !!req.headers['x-auth-token']
+        });
 
         if (!token) {
-            return res.status(401).json({ message: "Unauthorized access" });
+            return res.status(401).json({ 
+                success: false,
+                message: "Unauthorized access - No token provided" 
+            });
         }
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -25,6 +38,9 @@ export const userAuth = async (req, res, next) => {
         next();
     } catch (error) {
         console.error("Error in userAuth middleware:", error);
-        return res.status(500).json({ message: "Internal server error" });
+        return res.status(401).json({ 
+            success: false,
+            message: "Invalid token" 
+        });
     }
 }

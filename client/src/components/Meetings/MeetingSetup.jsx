@@ -9,6 +9,16 @@ const client = axios.create({
   withCredentials: true,
 });
 
+// Add the same interceptors as AuthContext
+client.interceptors.request.use((config) => {
+  const token = localStorage.getItem('userToken');
+  if (token) {
+    config.headers['x-auth-token'] = token;
+    config.headers['Authorization'] = `Bearer ${token}`;
+  }
+  return config;
+});
+
 const generateMeetingCode = () => {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let result = "";

@@ -33,7 +33,6 @@ const register = async (req, res) => {
     }
 
     try {
-
         const existingUser = await User.findOne({ email });
 
         if (existingUser) {
@@ -63,7 +62,9 @@ const register = async (req, res) => {
         setCookie(res, token, true);
 
         res.status(201).json({ 
+            success: true,
             message: "User registered successfully",
+            token: token, // Send token in response for mobile
             user: {
                 id: newUser._id,
                 username: newUser.username,
@@ -85,7 +86,6 @@ const login = async (req, res) => {
     }
 
     try {
-
         const user = await User.findOne({ email });
 
         if (!user) {
@@ -117,6 +117,7 @@ const login = async (req, res) => {
         res.status(200).json({
             success: true,
             message: "User logged in successfully",
+            token: token, // Send token in response for mobile
             user: {
                 id: user._id,
                 username: user.username,
