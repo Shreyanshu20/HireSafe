@@ -4,7 +4,6 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { createServer } from 'node:http';
-import { Server } from 'socket.io';
 import { connectToSocket } from './controller/socketManager.js';
 
 import authRouter from './router/auth.router.js';
@@ -15,12 +14,24 @@ const app = express();
 const server = createServer(app);
 const io = connectToSocket(server);
 
+// Fixed CORS configuration - explicitly list headers instead of using '*'
 app.use(cors({
-    origin: [
-        'http://localhost:5173',
-        'https://hiresafe.onrender.com'
+    origin: true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+        'Origin',
+        'X-Requested-With',
+        'Content-Type',  // This is the key one that was missing
+        'Accept',
+        'Authorization',
+        'x-auth-token',
+        'Cookie',
+        'Set-Cookie'
     ],
-    credentials: true
+    exposedHeaders: ['Set-Cookie'],
+    preflightContinue: false,
+    optionsSuccessStatus: 200
 }));
 
 app.use(express.json());
@@ -45,26 +56,9 @@ const main = async () => {
 
 main();
 
-// auth routes
-try {
-    app.use("/auth", authRouter);
-} catch (error) {
-    console.error("XX== Error setting up auth routes ==XX:", error);
-}
-
-// user routes
-try {
-    app.use("/user", userRouter);
-} catch (error) {
-    console.error("XX== Error setting up user routes ==XX:", error);
-}
-
-// meeting routes
-try {
-    app.use("/meeting", meetingRouter);
-} catch (error) {
-    console.error("XX== Error setting up meeting routes ==XX:", error);
-}
+app.use("/auth", authRouter);
+app.use("/user", userRouter);
+app.use("/meeting", meetingRouter);
 
 app.get('/', (req, res) => {
     res.send("Server is running");

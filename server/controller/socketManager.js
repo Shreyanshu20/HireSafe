@@ -1,30 +1,33 @@
-import { connect } from "mongoose";
-import { Server } from "socket.io"
+import { Server } from "socket.io";
 
 let connections = {};
 let messages = {};
 let timeOnline = {};
 
-export const connectToSocket = (socket) => {
-    const io = new Server(socket,
-        {
-            cors: {
-                origin: process.env.FRONTEND_URL || "http://localhost:5173",
-                methods: ["GET", "POST"],
-                allowedHeaders: ["Content-Type"],
-                credentials: true,
-            }
-        }
-    );
+export const connectToSocket = (server) => {
+    const io = new Server(server, {
+        cors: {
+            origin: true, // Allow all origins for mobile testing
+            methods: ["GET", "POST"],
+            allowedHeaders: ["*"],
+            credentials: true,
+        },
+        transports: ['websocket', 'polling'],
+        allowEIO3: true,
+        pingTimeout: 60000,
+        pingInterval: 25000
+    });
 
-    io.on("connection", socket => {
+    io.on("connection", (socket) => {
+        console.log(`User connected: ${socket.id}`);
 
         socket.on("join-call", (path) => {
+            console.log(`User ${socket.id} joining call: ${path}`);
+            
             if (connections[path] === undefined) {
                 connections[path] = [];
             }
             connections[path].push(socket.id);
-
             timeOnline[socket.id] = new Date();
 
             for (let i = 0; i < connections[path].length; i++) {
@@ -33,23 +36,26 @@ export const connectToSocket = (socket) => {
 
             if (messages[path] !== undefined) {
                 for (let i = 0; i < messages[path].length; i++) {
-                    io.to(socket.id).emit("chat-message", messages[path][i]['data'], messages[path][i]['sender'], messages[path][i]['socket-id-sender']) 
+                    io.to(socket.id).emit("chat-message", 
+                        messages[path][i]['data'], 
+                        messages[path][i]['sender'], 
+                        messages[path][i]['socket-id-sender']
+                    );
                 }
             }
-        })
+        });
 
         socket.on("signal", (toId, message) => {
+            console.log(`Signal from ${socket.id} to ${toId}`);
             io.to(toId).emit("signal", socket.id, message);
-        })
+        });
 
         socket.on("chat-message", (data, sender) => {
             const [matchingRoom, found] = Object.entries(connections)
                 .reduce(([room, isFound], [roomKey, roomValue]) => {
-
                     if (!isFound && roomValue.includes(socket.id)) {
                         return [roomKey, true];
                     }
-
                     return [room, isFound];
                 }, ['', false]);
 
@@ -58,17 +64,22 @@ export const connectToSocket = (socket) => {
                     messages[matchingRoom] = [];
                 }
 
-                messages[matchingRoom].push({ "sender": sender, "data": data, "socket-id-sender": socket.id });
+                messages[matchingRoom].push({ 
+                    "sender": sender, 
+                    "data": data, 
+                    "socket-id-sender": socket.id 
+                });
 
                 connections[matchingRoom].forEach((elem) => {
                     io.to(elem).emit("chat-message", data, sender, socket.id);
-                })
+                });
             }
-        })
+        });
 
         socket.on("disconnect", () => {
+            console.log(`User disconnected: ${socket.id}`);
+            
             var diffTime = Math.abs(timeOnline[socket.id] - new Date());
-
             var key;
 
             for (const [k, v] of JSON.parse(JSON.stringify(Object.entries(connections)))) {
@@ -80,7 +91,6 @@ export const connectToSocket = (socket) => {
                         }
 
                         var index = connections[key].indexOf(socket.id);
-
                         connections[key].splice(index, 1);
 
                         if (connections[key].length === 0) {
@@ -89,8 +99,10 @@ export const connectToSocket = (socket) => {
                     }
                 }
             }
-        })
-    })
+            
+            delete timeOnline[socket.id];
+        });
+    });
 
     return io;
-}
+};

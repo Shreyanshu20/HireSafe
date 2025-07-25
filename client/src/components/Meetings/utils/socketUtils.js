@@ -3,12 +3,14 @@ import { toast } from "react-toastify";
 
 const server_url = import.meta.env.VITE_BACKEND_URL || "http://localhost:9000";
 
+// Enhanced peer configuration for mobile devices
 const peerConfigConnections = {
   iceServers: [
-    {
-      urls: "stun:stun.l.google.com:19302",
-    },
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun2.l.google.com:19302" }
   ],
+  iceCandidatePoolSize: 10
 };
 
 export const connections = {}; // Export connections
@@ -21,80 +23,76 @@ export const connectToSocketServer = ({
   videoRef
 }) => {
   socketRef.current = io.connect(server_url, {
-    secure: false,
     withCredentials: true,
-  });
-
-  socketRef.current.on("signal", (fromId, message) => {
-    gotMessageFromServer(fromId, message, socketIdRef);
+    transports: ['websocket', 'polling']
   });
 
   socketRef.current.on("connect", () => {
+    console.log("Connected with ID:", socketRef.current.id);
     socketRef.current.emit("join-call", meetingCode);
     toast.success("Connected to the meeting successfully!");
-
     socketIdRef.current = socketRef.current.id;
+  });
 
-    socketRef.current.on("user-left", (id) => {
-      setVideos((videos) => videos.filter((video) => video.socketId !== id));
-    });
+  socketRef.current.on("signal", (fromId, message) => {
+    gotMessageFromServer(fromId, message, socketRef, socketIdRef);
+  });
 
-    socketRef.current.on("user-joined", (id, clients) => {
-      handleUserJoined(id, clients, socketRef, socketIdRef, setVideos, videoRef);
-    });
+  socketRef.current.on("user-left", (id) => {
+    setVideos((videos) => videos.filter((video) => video.socketId !== id));
+    if (connections[id]) {
+      connections[id].close();
+      delete connections[id];
+    }
+  });
+
+  socketRef.current.on("user-joined", (id, clients) => {
+    handleUserJoined(id, clients, socketRef, socketIdRef, setVideos, videoRef);
   });
 };
 
-const gotMessageFromServer = (fromId, message, socketIdRef) => {
-  const signal = JSON.parse(message);
+const gotMessageFromServer = async (fromId, message, socketRef, socketIdRef) => {
+  try {
+    const signal = JSON.parse(message);
+    
+    if (fromId === socketIdRef.current) return;
+    if (!connections[fromId]) return;
 
-  if (fromId !== socketIdRef.current) {
     if (signal.sdp) {
-      connections[fromId]
-        .setRemoteDescription(new RTCSessionDescription(signal.sdp))
-        .then(() => {
-          if (signal.sdp.type === "offer") {
-            connections[fromId].createAnswer().then((description) => {
-              connections[fromId]
-                .setLocalDescription(description)
-                .then(() => {
-                  socketRef.current.emit(
-                    "signal",
-                    fromId,
-                    JSON.stringify({
-                      sdp: connections[fromId].localDescription,
-                    })
-                  );
-                })
-                .catch((error) => {
-                  console.error("Error sending signal:", error);
-                  toast.error("Failed to send signal. Please try again.");
-                });
-            });
-          }
-        })
-        .catch((error) => {
-          console.error("Error setting remote description:", error);
-          toast.error("Failed to set remote description. Please try again.");
-        });
+      await connections[fromId].setRemoteDescription(new RTCSessionDescription(signal.sdp));
+      
+      if (signal.sdp.type === "offer") {
+        const answer = await connections[fromId].createAnswer();
+        await connections[fromId].setLocalDescription(answer);
+        
+        socketRef.current.emit(
+          "signal",
+          fromId,
+          JSON.stringify({ sdp: connections[fromId].localDescription })
+        );
+      }
     }
+    
     if (signal.ice) {
-      connections[fromId]
-        .addIceCandidate(new RTCIceCandidate(signal.ice))
-        .catch((error) => {
-          console.error("Error adding ICE candidate:", error);
-          toast.error("Failed to add ICE candidate. Please try again.");
-        });
+      try {
+        await connections[fromId].addIceCandidate(new RTCIceCandidate(signal.ice));
+      } catch (error) {
+        console.warn("ICE candidate error (normal):", error);
+      }
     }
+  } catch (error) {
+    console.error("Error processing signal:", error);
   }
 };
 
-const handleUserJoined = (id, clients, socketRef, socketIdRef, setVideos, videoRef) => {
-  clients.forEach((socketListId) => {
+const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, videoRef) => {
+  for (const socketListId of clients) {
+    if (socketListId === socketIdRef.current) continue;
+    
     connections[socketListId] = new RTCPeerConnection(peerConfigConnections);
     
     connections[socketListId].onicecandidate = (event) => {
-      if (event.candidate !== null) {
+      if (event.candidate) {
         socketRef.current.emit(
           "signal",
           socketListId,
@@ -103,73 +101,58 @@ const handleUserJoined = (id, clients, socketRef, socketIdRef, setVideos, videoR
       }
     };
 
-    connections[socketListId].onaddstream = (event) => {
-      let videoExists =
-        videoRef.current &&
-        videoRef.current.find((video) => video.socketId === socketListId);
-
-      if (videoExists) {
-        setVideos((videos) => {
-          const updatedVideos = videos.map((video) =>
-            video.socketId === socketListId
-              ? { ...video, stream: event.stream }
-              : video
+    // Use ontrack for modern browsers
+    connections[socketListId].ontrack = (event) => {
+      const [stream] = event.streams;
+      
+      setVideos((videos) => {
+        const existingVideo = videos.find(video => video.socketId === socketListId);
+        
+        if (existingVideo) {
+          const updatedVideos = videos.map(video =>
+            video.socketId === socketListId ? { ...video, stream } : video
           );
           videoRef.current = updatedVideos;
           return updatedVideos;
-        });
-      } else {
-        let newVideo = {
-          socketId: socketListId,
-          stream: event.stream,
-          autoPlay: true,
-          playsinline: true,
-        };
-
-        setVideos((videos) => {
+        } else {
+          const newVideo = {
+            socketId: socketListId,
+            stream,
+            autoPlay: true,
+            playsinline: true,
+          };
           const updatedVideos = [...videos, newVideo];
           videoRef.current = updatedVideos;
           return updatedVideos;
-        });
-      }
+        }
+      });
     };
 
-    if (window.localStream !== undefined && window.localStream !== null) {
-      window.localStream.getTracks().forEach(track => {
+    // Add local stream tracks
+    if (window.localStream && window.localStream.getTracks) {
+      for (const track of window.localStream.getTracks()) {
         connections[socketListId].addTrack(track, window.localStream);
-      });
+      }
     }
-  });
+  }
 
-  // Handle when current user joins - create offers for existing users
+  // Create offers if this is the current user
   if (id === socketIdRef.current) {
-    for (let id2 in connections) {
+    for (const id2 in connections) {
       if (id2 === socketIdRef.current) continue;
 
       try {
-        if (window.localStream && window.localStream.getTracks) {
-          window.localStream.getTracks().forEach(track => {
-            connections[id2].addTrack(track, window.localStream);
-          });
-        }
+        const offer = await connections[id2].createOffer();
+        await connections[id2].setLocalDescription(offer);
+        
+        socketRef.current.emit(
+          "signal",
+          id2,
+          JSON.stringify({ sdp: connections[id2].localDescription })
+        );
       } catch (error) {
-        console.error("Error adding stream to connection:", error);
+        console.error("Error creating offer:", error);
       }
-
-      connections[id2].createOffer().then((description) => {
-        connections[id2]
-          .setLocalDescription(description)
-          .then(() => {
-            socketRef.current.emit(
-              "signal",
-              id2,
-              JSON.stringify({ sdp: connections[id2].localDescription })
-            );
-          })
-          .catch((error) => {
-            console.error("Error setting local description:", error);
-          });
-      });
     }
   }
 };

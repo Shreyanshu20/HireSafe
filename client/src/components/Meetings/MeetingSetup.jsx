@@ -156,6 +156,7 @@ export default function MeetingSetup({
           ref={localVideoRef}
           autoPlay
           muted
+          playsInline
           className="w-[300px] h-[200px] bg-gray-800 rounded"
         ></video>
       </div>

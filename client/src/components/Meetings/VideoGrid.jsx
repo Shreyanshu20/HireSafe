@@ -7,6 +7,7 @@ export default function VideoGrid({ localVideoRef, videos, screen, screenStream 
         ref={localVideoRef}
         autoPlay
         muted
+        playsInline
         className="w-[400px] h-[300px] bg-gray-800 rounded"
       ></video>
 
@@ -21,6 +22,7 @@ export default function VideoGrid({ localVideoRef, videos, screen, screenStream 
             }}
             autoPlay
             muted
+            playsInline
             className="w-[400px] h-[300px] bg-gray-800 rounded"
           ></video>
         </div>
@@ -37,6 +39,7 @@ export default function VideoGrid({ localVideoRef, videos, screen, screenStream 
               }
             }}
             autoPlay
+            playsInline
             className="w-[400px] h-[300px] bg-gray-800 rounded"
           ></video>
         </div>
