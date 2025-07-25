@@ -16,7 +16,7 @@ function HomePage() {
         </>
       ) : (
         <>
-          <Link to="/login">Login</Link>
+          <Link to="/login">Loginnn</Link>
           <br />
           <Link to="/register">Register</Link>
           <br />
