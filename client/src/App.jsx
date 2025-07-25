@@ -7,8 +7,9 @@ import "react-toastify/dist/ReactToastify.css";
 import HomePage from "./components/Homepage.jsx";
 import AuthPage from "./components/AuthPage.jsx";
 import Layout from "./Layout.jsx";
-import Meetings from "./components/Meetings.jsx";
+import Meetings from "./components/Meetings/Meetings.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
+import NotFound from "./NotFound.jsx";
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
     </>
