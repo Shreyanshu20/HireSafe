@@ -9,6 +9,7 @@ import { connectToSocket } from './controller/socketManager.js';
 import authRouter from './router/auth.router.js';
 import userRouter from './router/user.router.js';
 import meetingRouter from './router/meeting.router.js';
+import interviewRouter from './router/interview.router.js';
 
 const app = express();
 const server = createServer(app);
@@ -55,9 +56,11 @@ const main = async () => {
 
 main();
 
-app.use("/auth", authRouter);
-app.use("/user", userRouter);
-app.use("/meeting", meetingRouter);
+// Routes
+app.use('/auth', authRouter);
+app.use('/user', userRouter);
+app.use('/meeting', meetingRouter);
+app.use('/interview', interviewRouter); // ✅ Add interview routes
 
 app.get('/', (req, res) => {
     res.send("Server is running");

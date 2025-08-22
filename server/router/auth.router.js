@@ -1,16 +1,16 @@
-import { Router } from "express";
-import { register, login, logout } from "../controller/auth.controller.js";
+import { Router } from 'express';
+import { login, logout, register } from '../controller/auth.controller.js';
+import { userAuth } from '../middleware/userAuth.js';
 
 const router = Router();
 
 //login
 router.post('/login', login);
 
-//logout
-router.get('/logout', logout);
+//logout - ✅ Add userAuth middleware to get userId
+router.get('/logout', userAuth, logout);
 
 //register
 router.post('/register', register);
-
 
 export default router;

@@ -78,7 +78,6 @@ class ActivityService {
 
 export const ACTIVITY_TYPES = {
   LOGIN: 'LOGIN',
-  LOGOUT: 'LOGOUT',
   MEETING: 'MEETING',
   INTERVIEW: 'INTERVIEW',
   PROFILE_UPDATE: 'PROFILE_UPDATE'

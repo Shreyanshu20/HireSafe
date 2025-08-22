@@ -11,7 +11,7 @@ import {
   stopMalpracticeMonitoring,
   faceDetectionService
 } from './utils/interviewUtils';
-import ActivityService, { ACTIVITY_TYPES } from '../../services/activityService';
+import InterviewService from '../../services/interviewService'; // ✅ Use InterviewService
 
 const InterviewRoom = ({
   meetingCode,
@@ -33,6 +33,7 @@ const InterviewRoom = ({
   const [isRecording, setIsRecording] = useState(false);
   const [interviewDuration, setInterviewDuration] = useState(0);
   const [monitoringActive, setMonitoringActive] = useState(false);
+  const [sessionId, setSessionId] = useState(null);
 
   const {
     userRole,
@@ -42,6 +43,13 @@ const InterviewRoom = ({
     canRecord
   } = useInterviewRole(meetingData);
 
+  // Set session ID from meeting data
+  useEffect(() => {
+    if (meetingData?.sessionId) {
+      setSessionId(meetingData.sessionId);
+    }
+  }, [meetingData]);
+
   // Timer
   useEffect(() => {
     const timer = setInterval(() => {
@@ -50,7 +58,7 @@ const InterviewRoom = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Video/Audio changes - use interview utils
+  // Video/Audio changes
   useEffect(() => {
     if (video !== undefined && audio !== undefined) {
       getInterviewUserMedia({
@@ -74,7 +82,6 @@ const InterviewRoom = ({
     if (isInterviewee && video && localVideoRef.current && !monitoringActive) {
       const startMonitoring = async () => {
         try {
-          // Wait for video to be ready
           await new Promise(resolve => {
             const checkVideo = () => {
               if (localVideoRef.current?.videoWidth > 0) {
@@ -86,11 +93,9 @@ const InterviewRoom = ({
             checkVideo();
           });
 
-          // Set up malpractice detection callback
-          const handleMalpractice = (event) => {
+          const handleMalpractice = async (event) => {
             console.log('Malpractice detected:', event);
             
-            // Emit to socket for interviewer
             if (socketRef.current) {
               socketRef.current.emit('malpractice-detected', {
                 meetingCode,
@@ -101,22 +106,23 @@ const InterviewRoom = ({
               });
             }
 
-            // Log to activity service
-            ActivityService.logMalpracticeDetection(
-              meetingCode,
-              event.type,
-              event.confidence,
-              {
-                message: event.message,
-                user_role: userRole,
-                detection_data: event.data
-              }
-            ).catch(error => {
+            // ✅ Use InterviewService
+            try {
+              await InterviewService.logMalpracticeDetection(
+                meetingCode,
+                event.type,
+                event.confidence,
+                {
+                  message: event.message,
+                  user_role: userRole,
+                  detection_data: event.data
+                }
+              );
+            } catch (error) {
               console.error('Failed to log malpractice:', error);
-            });
+            }
           };
 
-          // Register callback and start monitoring
           faceDetectionService.onMalpracticeDetected(handleMalpractice);
           
           const started = startMalpracticeMonitoring(localVideoRef.current, {
@@ -137,7 +143,6 @@ const InterviewRoom = ({
       startMonitoring();
     }
 
-    // Cleanup
     return () => {
       if (monitoringActive) {
         stopMalpracticeMonitoring();
@@ -162,49 +167,26 @@ const InterviewRoom = ({
       return;
     }
 
-    try {
-      setIsRecording(!isRecording);
-      
-      const activityType = isRecording 
-        ? ACTIVITY_TYPES.INTERVIEW_RECORDING_STOPPED 
-        : ACTIVITY_TYPES.INTERVIEW_RECORDING_STARTED;
-      
-      await ActivityService.logInterviewActivity(
-        meetingCode,
-        activityType,
-        `Recording ${isRecording ? 'stopped' : 'started'}`,
-        { user_role: userRole }
-      );
-
-      toast.success(`Recording ${isRecording ? 'stopped' : 'started'}`);
-    } catch (error) {
-      console.error('Recording error:', error);
-      toast.error('Recording failed');
-    }
+    setIsRecording(!isRecording);
+    toast.success(`Recording ${isRecording ? 'stopped' : 'started'}`);
   };
 
   const handleEndInterview = async () => {
     try {
-      // Stop monitoring
       if (monitoringActive) {
         stopMalpracticeMonitoring();
         setMonitoringActive(false);
       }
 
-      // Log activity
-      await ActivityService.logInterviewActivity(
-        meetingCode,
-        ACTIVITY_TYPES.INTERVIEW_ENDED,
-        `Interview ${isInterviewer ? 'ended' : 'left'} by ${userRole}`,
-        { user_role: userRole, duration_seconds: interviewDuration }
-      );
+      // ✅ Use InterviewService to end session
+      if (sessionId) {
+        await InterviewService.endInterviewSession(sessionId, 0);
+      }
 
-      // Stop media tracks
       if (cameraStream && cameraStream.getTracks) {
         cameraStream.getTracks().forEach((track) => track.stop());
       }
       
-      // Disconnect socket
       if (socketRef.current) {
         socketRef.current.disconnect();
       }
@@ -226,12 +208,34 @@ const InterviewRoom = ({
   return (
     <div className="w-full min-h-screen p-4">
       {/* Header */}
-      <div className="mb-4 w-full">
-        <span className="font-bold">Interview Code: {meetingCode}</span>
-        {userRole && <span> | Role: {userRole}</span>}
-        <span> | Duration: {formatTime(interviewDuration)}</span>
-        {isRecording && <span className="text-red-500"> | RECORDING</span>}
-        {monitoringActive && <span className="text-orange-500"> | MONITORING</span>}
+      <div className="mb-4 w-full p-4">
+        <div className="flex justify-between items-center">
+          <div>
+            <span className="font-bold text-lg">Interview: {meetingCode}</span>
+            {userRole && (
+              <span className={`ml-3 px-2 py-1 rounded text-sm font-medium ${
+                isInterviewer ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+              }`}>
+                {userRole}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center space-x-4 text-sm text-gray-600">
+            <span>Duration: {formatTime(interviewDuration)}</span>
+            {isRecording && (
+              <span className="flex items-center text-red-600">
+                <span className="w-2 h-2 bg-red-600 rounded-full mr-2 animate-pulse"></span>
+                RECORDING
+              </span>
+            )}
+            {monitoringActive && (
+              <span className="flex items-center text-orange-600">
+                <span className="w-2 h-2 bg-orange-600 rounded-full mr-2 animate-pulse"></span>
+                MONITORING
+              </span>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Main Layout */}
@@ -272,17 +276,21 @@ const InterviewRoom = ({
       </div>
 
       {/* Controls */}
-      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2 bg-white p-2 rounded shadow-lg">
+      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2 bg-white p-3 rounded-lg shadow-lg border">
         <button
           onClick={handleVideo}
-          className={`px-4 py-2 text-white rounded ${video ? 'bg-blue-500' : 'bg-gray-500'}`}
+          className={`px-4 py-2 text-white rounded font-medium transition-colors ${
+            video ? 'bg-blue-500 hover:bg-blue-600' : 'bg-gray-500 hover:bg-gray-600'
+          }`}
         >
           {video ? "Video On" : "Video Off"}
         </button>
         
         <button
           onClick={handleAudio}
-          className={`px-4 py-2 text-white rounded ${audio ? 'bg-green-500' : 'bg-gray-500'}`}
+          className={`px-4 py-2 text-white rounded font-medium transition-colors ${
+            audio ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-500 hover:bg-gray-600'
+          }`}
         >
           {audio ? "Audio On" : "Audio Off"}
         </button>
@@ -290,7 +298,9 @@ const InterviewRoom = ({
         {canRecord && (
           <button
             onClick={handleRecording}
-            className={`px-4 py-2 text-white rounded ${isRecording ? 'bg-red-500' : 'bg-orange-500'}`}
+            className={`px-4 py-2 text-white rounded font-medium transition-colors ${
+              isRecording ? 'bg-red-500 hover:bg-red-600' : 'bg-orange-500 hover:bg-orange-600'
+            }`}
           >
             {isRecording ? "Stop Recording" : "Start Recording"}
           </button>
@@ -298,7 +308,7 @@ const InterviewRoom = ({
 
         <button
           onClick={handleEndInterview}
-          className="px-4 py-2 bg-red-500 text-white rounded"
+          className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded font-medium transition-colors"
         >
           {isInterviewer ? "End Interview" : "Leave"}
         </button>
