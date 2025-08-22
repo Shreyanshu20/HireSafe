@@ -3,11 +3,10 @@ import { User } from '../model/user.model.js';
 
 export const userAuth = async (req, res, next) => {
     try {
-        // Check multiple token sources for mobile compatibility
-        const token = req.cookies.userToken || 
-                     req.cookies.token || 
-                     req.headers.authorization?.split(' ')[1] || // Bearer token
-                     req.headers['x-auth-token']; // Custom header
+        const token = req.cookies.userToken ||
+            req.cookies.token ||
+            req.headers.authorization?.split(' ')[1] ||
+            req.headers['x-auth-token'];
 
         console.log('Token sources:', {
             cookie: !!req.cookies.userToken,
@@ -16,9 +15,9 @@ export const userAuth = async (req, res, next) => {
         });
 
         if (!token) {
-            return res.status(401).json({ 
+            return res.status(401).json({
                 success: false,
-                message: "Unauthorized access - No token provided" 
+                message: "Unauthorized access - No token provided"
             });
         }
 
@@ -38,9 +37,9 @@ export const userAuth = async (req, res, next) => {
         next();
     } catch (error) {
         console.error("Error in userAuth middleware:", error);
-        return res.status(401).json({ 
+        return res.status(401).json({
             success: false,
-            message: "Invalid token" 
+            message: "Invalid token"
         });
     }
 }

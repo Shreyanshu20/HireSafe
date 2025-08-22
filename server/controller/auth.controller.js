@@ -1,7 +1,7 @@
 import { User } from "../model/user.model.js"
-import bcrypt, { hash } from 'bcrypt';
+import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-
+import { logActivity, ACTIVITY_TYPES } from '../utils/activityHelper.js';
 
 const setCookie = (res, token, rememberMe = true) => {
     const maxAge = rememberMe ? (7 * 24 * 60 * 60 * 1000) : (1 * 24 * 60 * 60 * 1000);
@@ -23,7 +23,6 @@ const clearCookie = (res) => {
         path: '/'
     });
 };
-
 
 const register = async (req, res) => {
     const { username, email, password } = req.body;
@@ -64,7 +63,7 @@ const register = async (req, res) => {
         res.status(201).json({ 
             success: true,
             message: "User registered successfully",
-            token: token, // Send token in response for mobile
+            token: token, 
             user: {
                 id: newUser._id,
                 username: newUser.username,
@@ -114,10 +113,14 @@ const login = async (req, res) => {
 
         setCookie(res, token, true);
 
+        // Simple login activity logging
+        req.userId = user._id;
+        await logActivity(req, ACTIVITY_TYPES.LOGIN, `${user.username} logged in`);
+
         res.status(200).json({
             success: true,
             message: "User logged in successfully",
-            token: token, // Send token in response for mobile
+            token: token, 
             user: {
                 id: user._id,
                 username: user.username,
@@ -131,7 +134,7 @@ const login = async (req, res) => {
     }
 };
 
-const logout = (req, res) => {
+const logout = async (req, res) => {
     try {
         clearCookie(res);
         res.status(200).json({ message: "User logged out successfully" });

@@ -2,6 +2,7 @@ import axios from "axios";
 import { createContext, useContext, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
+import ActivityService, { ACTIVITY_TYPES } from '../services/activityService';
 
 export const AuthContext = createContext();
 
@@ -109,6 +110,18 @@ export const AuthProvider = ({ children }) => {
         const username = request.data.user?.username || "";
         setUserData({ username, email });
         setIsAuthenticated(true);
+        
+        // Log login activity
+        try {
+          await ActivityService.logActivity(
+            ACTIVITY_TYPES.LOGIN, 
+            'User logged in successfully',
+            { login_method: 'password' }
+          );
+        } catch (error) {
+          console.error('Failed to log login activity:', error);
+        }
+        
         router("/");
       }
     } catch (error) {
@@ -120,6 +133,16 @@ export const AuthProvider = ({ children }) => {
 
   const handleLogout = async () => {
     try {
+      // Log logout activity before clearing data
+      try {
+        await ActivityService.logActivity(
+          ACTIVITY_TYPES.LOGOUT, 
+          'User logged out'
+        );
+      } catch (error) {
+        console.error('Failed to log logout activity:', error);
+      }
+      
       let request = await client.get("/auth/logout");
 
       if (request.status === 200) {

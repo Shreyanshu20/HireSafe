@@ -1,5 +1,7 @@
 import { User } from '../model/user.model.js';
 import bcrypt from 'bcrypt';
+import ActivityService from '../service/activityService.js';
+import { logActivity, ACTIVITY_TYPES } from '../utils/activityHelper.js';
 
 const getUserProfile = async (req, res) => {
     try {
@@ -48,6 +50,9 @@ const changePassword = async (req, res) => {
         user.password = hashedPassword;
         await user.save();
 
+        // Log activity using simplified method
+        await logActivity(req, ACTIVITY_TYPES.PROFILE_UPDATE, 'User changed password');
+
         res.status(200).json({ message: "Password changed successfully" });
     } catch (error) {
         console.error("Error changing password:", error);
@@ -76,6 +81,9 @@ const deleteAccount = async (req, res) => {
             return res.status(400).json({ message: "Password is incorrect" });
         }
 
+        // Log activity before deletion
+        await logActivity(req, ACTIVITY_TYPES.PROFILE_UPDATE, 'User deleted account');
+
         await User.findByIdAndDelete(userId);
 
         res.clearCookie('userToken', {
@@ -92,8 +100,89 @@ const deleteAccount = async (req, res) => {
     }
 }
 
-const logActivity = async (req, res) => { }
+const logUserActivity = async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { activity_type, description, metadata = {} } = req.body;
 
-const getActivities = async (req, res) => { }
+        if (!activity_type || !description) {
+            return res.status(400).json({
+                success: false,
+                message: "Activity type and description are required"
+            });
+        }
 
-export { getUserProfile, changePassword, deleteAccount, logActivity, getActivities };
+        const activity = await ActivityService.logActivity(userId, activity_type, description, metadata);
+
+        res.status(201).json({
+            success: true,
+            message: "Activity logged successfully",
+            activity: {
+                id: activity._id,
+                activity_type: activity.activity_type,
+                description: activity.description,
+                start_time: activity.start_time
+            }
+        });
+
+    } catch (error) {
+        console.error("Error logging activity:", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+}
+
+const getActivities = async (req, res) => {
+    try {
+        const userId = req.userId;
+
+        const {
+            page = 1,
+            limit = 20,
+            activity_type = null,
+            stats = false
+        } = req.query;
+
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+
+        // Validate pagination parameters
+        if (pageNum < 1 || limitNum < 1 || limitNum > 100) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid pagination parameters"
+            });
+        }
+
+        const result = await ActivityService.getUserActivities(userId, pageNum, limitNum, activity_type);
+
+        // Include stats if requested
+        let activityStats = null;
+        if (stats === 'true') {
+            activityStats = await ActivityService.getActivityStats(userId);
+        }
+
+        const responseData = {
+            success: true,
+            message: "Activities retrieved successfully",
+            data: {
+                activities: result.activities,
+                pagination: result.pagination,
+                stats: activityStats
+            }
+        };
+
+        res.status(200).json(responseData);
+
+    } catch (error) {
+        console.error("Error fetching activities:", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+}
+
+export { getUserProfile, changePassword, deleteAccount, logUserActivity, getActivities };

@@ -23,7 +23,19 @@ function HomePage() {
         </>
       )}
 
+      <br />
+
+      {isLoggedIn() && (
+        <>
+          <Link to="/dashboard">Dashboard</Link>
+          <br />
+        </>
+      )}
+
       <Link to="/meeting">Meetings</Link>
+      <br />
+
+      <Link to="/interview">Interview</Link>
       <br />
     </>
   );

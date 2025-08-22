@@ -10,6 +10,8 @@ import Layout from "./Layout.jsx";
 import Meetings from "./components/Meetings/Meetings.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import NotFound from "./NotFound.jsx";
+import DashBoard from "./components/DashBoard/Dashboard.jsx";
+import Interview from "./components/Interview/Interview.jsx";
 
 function App() {
   return (
@@ -26,20 +28,42 @@ function App() {
         pauseOnHover
       />
       <Routes>
+        {/* Routes WITH navbar/footer */}
         <Route path="/" element={<Layout />}>
           <Route index element={<HomePage />} />
           <Route path="login" element={<AuthPage />} />
           <Route path="register" element={<AuthPage />} />
+          
           <Route
-            path="meeting"
+            path="dashboard"
             element={
               <ProtectedRoute>
-                <Meetings />
+                <DashBoard />
               </ProtectedRoute>
             }
           />
+
           <Route path="*" element={<NotFound />} />
         </Route>
+
+        {/* Routes WITHOUT navbar/footer (Full Screen) */}
+        <Route
+          path="meeting"
+          element={
+            <ProtectedRoute>
+              <Meetings />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="interview"
+          element={
+            <ProtectedRoute>
+              <Interview />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </>
   );

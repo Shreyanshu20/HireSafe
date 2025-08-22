@@ -14,7 +14,6 @@ const app = express();
 const server = createServer(app);
 const io = connectToSocket(server);
 
-// Fixed CORS configuration - explicitly list headers instead of using '*'
 app.use(cors({
     origin: true,
     credentials: true,
@@ -22,7 +21,7 @@ app.use(cors({
     allowedHeaders: [
         'Origin',
         'X-Requested-With',
-        'Content-Type',  // This is the key one that was missing
+        'Content-Type',
         'Accept',
         'Authorization',
         'x-auth-token',

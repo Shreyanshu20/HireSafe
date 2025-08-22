@@ -1,24 +1,22 @@
 import { Router } from 'express';
+import { getUserProfile, changePassword, deleteAccount, logUserActivity, getActivities } from '../controller/user.controller.js';
 import { userAuth } from '../middleware/userAuth.js';
-import { getUserProfile, changePassword, deleteAccount, logActivity, getActivities } from '../controller/user.controller.js';
 
 const router = Router();
 
-
-//get user profile
+// Get user profile
 router.get('/profile', userAuth, getUserProfile);
 
-//change password
-router.post('/change-password', userAuth, changePassword)
+// Change password
+router.post('/change-password', userAuth, changePassword);
 
-//delete account
-router.delete('/delete-account', userAuth, deleteAccount)
+// Delete account
+router.delete('/delete-account', userAuth, deleteAccount);
 
-//log activities
-router.post('/log-activity', userAuth, logActivity);
+// Log activity
+router.post('/log-activity', userAuth, logUserActivity);
 
-//get activities
+// Get activities
 router.get('/activities', userAuth, getActivities);
 
 export default router;
-

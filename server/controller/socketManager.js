@@ -7,7 +7,7 @@ let timeOnline = {};
 export const connectToSocket = (server) => {
     const io = new Server(server, {
         cors: {
-            origin: true, // Allow all origins for mobile testing
+            origin: true, 
             methods: ["GET", "POST"],
             allowedHeaders: ["*"],
             credentials: true,
@@ -72,6 +72,76 @@ export const connectToSocket = (server) => {
 
                 connections[matchingRoom].forEach((elem) => {
                     io.to(elem).emit("chat-message", data, sender, socket.id);
+                });
+            }
+        });
+
+        // ✅ ADD: Interview-specific socket events (without breaking existing)
+        socket.on("code-change", (data) => {
+            const { meetingCode, code, userRole } = data;
+            console.log(`Code changed in ${meetingCode} by ${userRole}`);
+            
+            // Find the room this socket belongs to
+            const [matchingRoom, found] = Object.entries(connections)
+                .reduce(([room, isFound], [roomKey, roomValue]) => {
+                    if (!isFound && roomValue.includes(socket.id)) {
+                        return [roomKey, true];
+                    }
+                    return [room, isFound];
+                }, ['', false]);
+
+            if (found && matchingRoom === meetingCode) {
+                // Broadcast to all users in the same room except sender
+                connections[matchingRoom].forEach((socketId) => {
+                    if (socketId !== socket.id) {
+                        io.to(socketId).emit("code-change", { code, userRole });
+                    }
+                });
+            }
+        });
+
+        socket.on("language-change", (data) => {
+            const { meetingCode, language, userRole } = data;
+            console.log(`Language changed to ${language} in ${meetingCode} by ${userRole}`);
+            
+            const [matchingRoom, found] = Object.entries(connections)
+                .reduce(([room, isFound], [roomKey, roomValue]) => {
+                    if (!isFound && roomValue.includes(socket.id)) {
+                        return [roomKey, true];
+                    }
+                    return [room, isFound];
+                }, ['', false]);
+
+            if (found && matchingRoom === meetingCode) {
+                connections[matchingRoom].forEach((socketId) => {
+                    if (socketId !== socket.id) {
+                        io.to(socketId).emit("language-change", { language, userRole });
+                    }
+                });
+            }
+        });
+
+        socket.on("malpractice-detected", (data) => {
+            const { meetingCode, type, confidence, message } = data;
+            console.log(`Malpractice detected in ${meetingCode}: ${type}`);
+            
+            const [matchingRoom, found] = Object.entries(connections)
+                .reduce(([room, isFound], [roomKey, roomValue]) => {
+                    if (!isFound && roomValue.includes(socket.id)) {
+                        return [roomKey, true];
+                    }
+                    return [room, isFound];
+                }, ['', false]);
+
+            if (found && matchingRoom === meetingCode) {
+                // Send to all participants in the interview
+                connections[matchingRoom].forEach((socketId) => {
+                    io.to(socketId).emit("malpractice-detected", {
+                        type,
+                        confidence,
+                        message,
+                        timestamp: new Date().toISOString()
+                    });
                 });
             }
         });
