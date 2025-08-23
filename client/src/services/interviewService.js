@@ -1,110 +1,203 @@
-import axios from "axios";
+import { io } from "socket.io-client";
 
-const server_url = import.meta.env.VITE_BACKEND_URL || "http://localhost:9000";
+// Interview-specific socket utilities (separate from meetings)
+let socket = null;
 
-// Create axios instance with credentials
-const client = axios.create({
-  baseURL: server_url,
-  withCredentials: true,
-});
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:9000";
 
-// Add request interceptor to include token
-client.interceptors.request.use((config) => {
-  const token = localStorage.getItem('userToken');
-  if (token) {
-    config.headers['x-auth-token'] = token;
-    config.headers['Authorization'] = `Bearer ${token}`;
-  }
-  return config;
-});
-
-class InterviewService {
-  async createInterview(interviewCode, config = {}) {
+export const interviewService = {
+  // Create a new interview session
+  createInterview: async (sessionId, interviewConfig = {}) => {
     try {
-      const response = await client.post('/interview/create', {
-        meeting_code: interviewCode,
-        interview_config: config
+      const response = await fetch(`${API_BASE}/interview/create`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          session_id: sessionId,
+          interview_config: interviewConfig,
+        }),
       });
-      
-      return { success: true, data: response.data };
-    } catch (error) {
-      console.error('Failed to create interview:', error);
-      return { 
-        success: false, 
-        error: error.response?.data?.message || error.message 
-      };
-    }
-  }
 
-  async joinInterview(interviewCode) {
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Error creating interview:", error);
+      throw error;
+    }
+  },
+
+  // Join an existing interview session
+  joinInterview: async (sessionId) => {
     try {
-      const response = await client.post('/interview/join', {
-        meeting_code: interviewCode
+      const response = await fetch(`${API_BASE}/interview/join`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          session_id: sessionId,
+        }),
       });
-      
-      return { success: true, data: response.data };
-    } catch (error) {
-      console.error('Failed to join interview:', error);
-      return { 
-        success: false, 
-        error: error.response?.data?.message || error.message 
-      };
-    }
-  }
 
-  async verifyInterview(interviewCode) {
-    try {
-      const response = await client.get(`/interview/verify/${interviewCode}`);
-      
-      return { success: true, data: response.data };
+      const data = await response.json();
+      return data;
     } catch (error) {
-      console.error('Failed to verify interview:', error);
-      return { 
-        success: false, 
-        error: error.response?.data?.message || error.message 
-      };
+      console.error("Error joining interview:", error);
+      throw error;
     }
-  }
+  },
 
-  async endInterviewSession(sessionId, malpracticeCount = 0) {
+  // Verify interview session exists
+  verifyInterview: async (sessionId) => {
     try {
-      const response = await client.post('/interview/end-session', {
-        sessionId,
-        malpracticeCount
-      });
-      
-      return { success: true, data: response.data };
-    } catch (error) {
-      console.error('Failed to end interview session:', error);
-      return { 
-        success: false, 
-        error: error.response?.data?.message || error.message 
-      };
-    }
-  }
-
-  async logMalpracticeDetection(interviewCode, type, confidence, metadata = {}) {
-    try {
-      const response = await client.post('/user/log-activity', {
-        activity_type: 'MALPRACTICE_DETECTION',
-        description: `Malpractice detected: ${type}`,
-        metadata: {
-          interview_code: interviewCode,
-          malpractice_type: type,
-          confidence_score: confidence,
-          ...metadata
+      const response = await fetch(
+        `${API_BASE}/interview/verify/${sessionId}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
         }
-      });
-      
-      return { success: true, data: response.data };
-    } catch (error) {
-      console.error('Failed to log malpractice:', error);
-      return { 
-        success: false, 
-        error: error.response?.data?.message || error.message 
-      };
-    }
-  }
-}
+      );
 
-export default new InterviewService();
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Error verifying interview:", error);
+      throw error;
+    }
+  },
+
+  // End interview session
+  endInterviewSession: async (sessionId, interviewSessionId = null) => {
+    try {
+      const response = await fetch(`${API_BASE}/interview/end-session`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          sessionId,
+          interviewSessionId,
+        }),
+      });
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Error ending interview session:", error);
+      throw error;
+    }
+  },
+
+  // Log malpractice detection (NEW - interview-specific)
+  logMalpractice: async (sessionId, type, confidence, description = "") => {
+    try {
+      const response = await fetch(`${API_BASE}/interview/log-malpractice`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          session_id: sessionId,
+          type,
+          confidence,
+          description,
+        }),
+      });
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Error logging malpractice:", error);
+      throw error;
+    }
+  },
+};
+
+export const connectToInterviewServer = (sessionId, userRole) => {
+  if (socket) {
+    socket.disconnect();
+  }
+
+  // Use interview-specific namespace or room
+  socket = io("/", {
+    transports: ["websocket", "polling"],
+    upgrade: true,
+    rememberUpgrade: true,
+  });
+
+  socket.emit("join-interview-room", {
+    sessionId,
+    userRole, // 'interviewer' or 'interviewee'
+    timestamp: new Date().toISOString(),
+  });
+
+  return socket;
+};
+
+export const sendInterviewMessage = (message, sessionId, sender) => {
+  if (socket) {
+    socket.emit("interview-message", {
+      message,
+      sessionId,
+      sender,
+      timestamp: new Date().toISOString(),
+    });
+  }
+};
+
+export const sendCodeChange = (code, language, sessionId) => {
+  if (socket) {
+    socket.emit("code-editor-change", {
+      code,
+      language,
+      sessionId,
+      timestamp: new Date().toISOString(),
+    });
+  }
+};
+
+// Interview-specific: Report malpractice (only interviewer can send)
+export const reportMalpractice = (
+  type,
+  confidence,
+  sessionId,
+  description = ""
+) => {
+  if (socket) {
+    socket.emit("interview-malpractice-event", {
+      type,
+      confidence,
+      sessionId,
+      description,
+      timestamp: new Date().toISOString(),
+    });
+  }
+};
+
+export const endInterviewSession = (sessionId) => {
+  if (socket) {
+    socket.emit("end-interview", {
+      sessionId,
+      endTime: new Date().toISOString(),
+    });
+  }
+};
+
+export const leaveInterviewRoom = (sessionId) => {
+  if (socket) {
+    socket.emit("leave-interview-room", { sessionId });
+    socket.disconnect();
+    socket = null;
+  }
+};
+
+export const getInterviewSocket = () => socket;

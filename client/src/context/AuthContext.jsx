@@ -10,7 +10,6 @@ const client = axios.create({
   withCredentials: true,
 });
 
-// Add request interceptor to include token in headers for mobile
 client.interceptors.request.use((config) => {
   const token = localStorage.getItem('userToken');
   if (token) {
@@ -20,10 +19,8 @@ client.interceptors.request.use((config) => {
   return config;
 });
 
-// Add response interceptor to handle token storage
 client.interceptors.response.use(
   (response) => {
-    // Store token if provided in response
     if (response.data?.token) {
       localStorage.setItem('userToken', response.data.token);
     }
@@ -44,7 +41,6 @@ export const AuthProvider = ({ children }) => {
 
   const router = useNavigate();
 
-  // Check if user is logged in on app load
   useEffect(() => {
     checkAuthStatus();
   }, []);
@@ -54,6 +50,7 @@ export const AuthProvider = ({ children }) => {
       const response = await client.get('/user/profile');
       if (response.status === 200) {
         setUserData({
+          _id: response.data._id,
           username: response.data.username,
           email: response.data.email,
         });
@@ -106,8 +103,12 @@ export const AuthProvider = ({ children }) => {
         }
         
         toast.success("Login successful!");
-        const username = request.data.user?.username || "";
-        setUserData({ username, email });
+        const user = request.data.user || {};
+        setUserData({ 
+          _id: user._id,
+          username: user.username || "",
+          email: email 
+        });
         setIsAuthenticated(true);
         
         router("/");

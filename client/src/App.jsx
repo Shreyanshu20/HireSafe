@@ -11,7 +11,7 @@ import Meetings from "./components/Meetings/Meetings.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import NotFound from "./NotFound.jsx";
 import DashBoard from "./components/DashBoard/Dashboard.jsx";
-import Interview from "./components/Interview/Interview.jsx";
+import Interview from "./components/Interview/Interviews.jsx";
 
 function App() {
   return (

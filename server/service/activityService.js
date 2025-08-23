@@ -1,4 +1,4 @@
-import { Activity } from '../model/activity.model.js';
+import Activity from '../model/activity.model.js';
 import mongoose from 'mongoose';
 
 class ActivityService {

@@ -1,320 +1,259 @@
-import React, { useState, useEffect } from 'react';
-import { toast } from 'react-toastify';
-import CodeEditor from './CodeEditor';
-import InterviewVideoGrid from './InterviewVideoGrid';
-import MalpracticePanel from './MalpracticePanel';
-import { useInterviewRole } from './hooks/useInterviewRole';
-import { 
-  getInterviewUserMedia, 
-  initializeAudioContext,
-  startMalpracticeMonitoring,
-  stopMalpracticeMonitoring,
-  faceDetectionService
-} from './utils/interviewUtils';
-import InterviewService from '../../services/interviewService'; // ✅ Use InterviewService
+import React, { useState, useEffect } from "react";
+import { toast } from "react-toastify";
+import InterviewControls from "./InterviewControls";
+import VideoGrid from "./VideoGrid";
+import ChatModal from "./ChatModal";
+import { handleEndCall } from "./utils/mediaUtils";
+import { sendCodeChange, sendInterviewMessage } from "./utils/socketUtils";
 
-const InterviewRoom = ({
-  meetingCode,
-  meetingData,
+export default function InterviewRoom({
+  interviewCode,
   localVideoRef,
   videos,
   video,
   setVideo,
   audio,
   setAudio,
+  screen,
+  setScreen,
+  screenStream,
+  setScreenStream,
   cameraStream,
   setCameraStream,
   videoAvailable,
   audioAvailable,
   socketRef,
   socketIdRef,
-  onLeaveInterview
-}) => {
-  const [isRecording, setIsRecording] = useState(false);
-  const [interviewDuration, setInterviewDuration] = useState(0);
-  const [monitoringActive, setMonitoringActive] = useState(false);
-  const [sessionId, setSessionId] = useState(null);
+  anomalies,
+  setAnomalies,
+  onLeaveInterview,
+  interviewState, // Add this prop
+}) {
+  const [showModal, setShowModal] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [message, setMessage] = useState("");
+  const [newMessage, setNewMessage] = useState(0);
+  const [codeContent, setCodeContent] = useState(`// Welcome to the interview
+function solve() {
+    // Write your solution here
+    
+}`);
+  const [selectedLanguage, setSelectedLanguage] = useState("javascript");
+  const [userRole, setUserRole] = useState("interviewee"); // Default to interviewee
 
-  const {
-    userRole,
-    isInterviewer,
-    isInterviewee,
-    canViewMalpractice,
-    canRecord
-  } = useInterviewRole(meetingData);
-
-  // Set session ID from meeting data
+  // Set up chat message listener
   useEffect(() => {
-    if (meetingData?.sessionId) {
-      setSessionId(meetingData.sessionId);
-    }
-  }, [meetingData]);
-
-  // Timer
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setInterviewDuration(prev => prev + 1);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Video/Audio changes
-  useEffect(() => {
-    if (video !== undefined && audio !== undefined) {
-      getInterviewUserMedia({
-        video,
-        audio,
-        videoAvailable,
-        audioAvailable,
-        cameraStream,
-        setCameraStream,
-        screen: false,
-        screenStream: null,
-        socketRef,
-        socketIdRef,
-        localVideoRef
-      });
-    }
-  }, [audio, video]);
-
-  // ✅ Start malpractice monitoring ONLY for interviewees
-  useEffect(() => {
-    if (isInterviewee && video && localVideoRef.current && !monitoringActive) {
-      const startMonitoring = async () => {
-        try {
-          await new Promise(resolve => {
-            const checkVideo = () => {
-              if (localVideoRef.current?.videoWidth > 0) {
-                resolve();
-              } else {
-                setTimeout(checkVideo, 100);
-              }
-            };
-            checkVideo();
-          });
-
-          const handleMalpractice = async (event) => {
-            console.log('Malpractice detected:', event);
-            
-            if (socketRef.current) {
-              socketRef.current.emit('malpractice-detected', {
-                meetingCode,
-                type: event.type,
-                confidence: event.confidence,
-                message: event.message,
-                timestamp: event.timestamp
-              });
-            }
-
-            // ✅ Use InterviewService
-            try {
-              await InterviewService.logMalpracticeDetection(
-                meetingCode,
-                event.type,
-                event.confidence,
-                {
-                  message: event.message,
-                  user_role: userRole,
-                  detection_data: event.data
-                }
-              );
-            } catch (error) {
-              console.error('Failed to log malpractice:', error);
-            }
-          };
-
-          faceDetectionService.onMalpracticeDetected(handleMalpractice);
-          
-          const started = startMalpracticeMonitoring(localVideoRef.current, {
-            detectExpressions: true,
-            strictMode: true
-          });
-
-          if (started) {
-            setMonitoringActive(true);
-            console.log('Malpractice monitoring started for interviewee');
-          }
-
-        } catch (error) {
-          console.error('Failed to start monitoring:', error);
-        }
-      };
-
-      startMonitoring();
+    if (socketRef.current) {
+      // Use INTERVIEW-specific chat event
+      socketRef.current.on("interview-chat-message", addMessage);
     }
 
-    return () => {
-      if (monitoringActive) {
-        stopMalpracticeMonitoring();
-        setMonitoringActive(false);
+    // Set up global handlers for code synchronization
+    window.handleCodeChange = (data) => {
+      if (data.code !== undefined) {
+        setCodeContent(data.code);
       }
     };
-  }, [isInterviewee, video, localVideoRef.current, monitoringActive]);
 
-  const handleVideo = () => {
-    initializeAudioContext();
-    setVideo(!video);
-  };
-
-  const handleAudio = () => {
-    initializeAudioContext();
-    setAudio(!audio);
-  };
-
-  const handleRecording = async () => {
-    if (!canRecord) {
-      toast.error('Only interviewers can control recording');
-      return;
-    }
-
-    setIsRecording(!isRecording);
-    toast.success(`Recording ${isRecording ? 'stopped' : 'started'}`);
-  };
-
-  const handleEndInterview = async () => {
-    try {
-      if (monitoringActive) {
-        stopMalpracticeMonitoring();
-        setMonitoringActive(false);
+    window.handleLanguageChange = (data) => {
+      if (data.language !== undefined) {
+        setSelectedLanguage(data.language);
       }
+    };
 
-      // ✅ Use InterviewService to end session
-      if (sessionId) {
-        await InterviewService.endInterviewSession(sessionId, 0);
-      }
-
-      if (cameraStream && cameraStream.getTracks) {
-        cameraStream.getTracks().forEach((track) => track.stop());
-      }
-      
+    return () => {
       if (socketRef.current) {
-        socketRef.current.disconnect();
+        socketRef.current.off("interview-chat-message", addMessage);
       }
-      
-      onLeaveInterview();
-      toast.success('Left interview');
-    } catch (error) {
-      console.error('End interview error:', error);
-      onLeaveInterview();
+      // Clean up global handlers
+      delete window.handleCodeChange;
+      delete window.handleLanguageChange;
+    };
+  }, [socketRef]);
+
+  // Add this useEffect to determine user role
+  useEffect(() => {
+    // Determine role based on interview state or session data
+    if (interviewState === "create") {
+      setUserRole("interviewer");
+    } else {
+      setUserRole("interviewee");
+    }
+  }, [interviewState]);
+
+  const addMessage = (data, sender, socketIdSender) => {
+    setMessages((prevMessages) => [
+      ...prevMessages,
+      { sender: sender, data: data },
+    ]);
+    if (socketIdSender !== socketIdRef.current) {
+      setNewMessage((prevNewMessage) => prevNewMessage + 1);
     }
   };
 
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  const onCodeEdit = (newCode) => {
+    setCodeContent(newCode);
+    // Send code change to other participants
+    sendCodeChange(socketRef, newCode, selectedLanguage, interviewCode);
+  };
+
+  const onLanguageChange = (newLanguage) => {
+    setSelectedLanguage(newLanguage);
+    // Send language change to other participants
+    if (socketRef.current) {
+      socketRef.current.emit("language-change", {
+        language: newLanguage,
+      });
+    }
+  };
+
+  const sendMessage = () => {
+    if (message.trim()) {
+      sendInterviewMessage(socketRef, message, "You");
+      setMessage("");
+    }
+  };
+
+  const openChat = () => {
+    setShowModal(true);
+    setNewMessage(0);
+  };
+
+  const closeChat = () => {
+    setShowModal(false);
+  };
+
+  const handleMessage = (e) => {
+    setMessage(e.target.value);
+  };
+
+  const onEndCall = () => {
+    handleEndCall({ cameraStream, screenStream, socketRef });
+    onLeaveInterview();
   };
 
   return (
-    <div className="w-full min-h-screen p-4">
-      {/* Header */}
-      <div className="mb-4 w-full p-4">
-        <div className="flex justify-between items-center">
-          <div>
-            <span className="font-bold text-lg">Interview: {meetingCode}</span>
-            {userRole && (
-              <span className={`ml-3 px-2 py-1 rounded text-sm font-medium ${
-                isInterviewer ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
-              }`}>
-                {userRole}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center space-x-4 text-sm text-gray-600">
-            <span>Duration: {formatTime(interviewDuration)}</span>
-            {isRecording && (
-              <span className="flex items-center text-red-600">
-                <span className="w-2 h-2 bg-red-600 rounded-full mr-2 animate-pulse"></span>
-                RECORDING
-              </span>
-            )}
-            {monitoringActive && (
-              <span className="flex items-center text-orange-600">
-                <span className="w-2 h-2 bg-orange-600 rounded-full mr-2 animate-pulse"></span>
-                MONITORING
-              </span>
-            )}
-          </div>
-        </div>
+    <>
+      <div className="mb-4">
+        <strong>Interview Code: {interviewCode}</strong>
       </div>
 
-      {/* Main Layout */}
-      <div className="w-full h-screen flex">
-        {/* Left - Code Editor */}
-        <div className="w-1/2 h-full border-r border-gray-300">
-          <CodeEditor
-            socketRef={socketRef}
-            meetingCode={meetingCode}
-            userRole={userRole}
-          />
-        </div>
+      {/* Main Layout: Code Editor on Left, Videos on Right */}
+      <div className="flex gap-4 mb-4">
+        {/* Code Editor - Left Side */}
+        <div className="w-1/2">
+          <div className="bg-gray-900 rounded-lg border border-gray-700">
+            <div className="flex items-center justify-between p-3 border-b border-gray-700">
+              <h3 className="text-white text-sm font-medium">Code Editor</h3>
+              <div className="flex items-center space-x-2">
+                <select
+                  value={selectedLanguage}
+                  onChange={(e) => onLanguageChange(e.target.value)}
+                  className="bg-gray-800 text-white text-xs rounded px-2 py-1 border border-gray-600"
+                >
+                  <option value="javascript">JavaScript</option>
+                  <option value="python">Python</option>
+                  <option value="java">Java</option>
+                  <option value="cpp">C++</option>
+                </select>
+                <button className="bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-1 rounded">
+                  Run
+                </button>
+              </div>
+            </div>
 
-        {/* Right - Video + Monitoring */}
-        <div className="w-1/2 h-full flex flex-col">
-          {/* Video Section */}
-          <div className="flex-1 p-4">
-            <InterviewVideoGrid
-              localVideoRef={localVideoRef}
-              videos={videos}
-              userRole={userRole}
-              isInterviewer={isInterviewer}
-              monitoringActive={monitoringActive}
-            />
-          </div>
-
-          {/* Malpractice Panel (Interviewer Only) */}
-          {canViewMalpractice && (
-            <div className="h-64 border-t border-gray-300 p-4">
-              <MalpracticePanel
-                socketRef={socketRef}
-                meetingCode={meetingCode}
-                isInterviewer={isInterviewer}
+            <div className="p-4">
+              <textarea
+                value={codeContent}
+                onChange={(e) => onCodeEdit(e.target.value)}
+                className="w-full h-[400px] bg-gray-800 text-white text-sm font-mono resize-none border-none outline-none"
+                style={{ fontFamily: "Monaco, Consolas, monospace" }}
+                placeholder="// Start coding here..."
               />
             </div>
-          )}
+          </div>
+        </div>
+
+        {/* Video Grid - Right Side */}
+        <div className="w-1/2">
+          <VideoGrid
+            localVideoRef={localVideoRef}
+            videos={videos}
+            screen={screen}
+            screenStream={screenStream}
+            socketRef={socketRef}
+            interviewCode={interviewCode}
+            isInterviewer={userRole === "interviewer"}
+            onAnomalyDetected={(anomaly) => {
+              // Handle anomaly detection locally if needed
+              console.log("Anomaly detected locally:", anomaly);
+            }}
+          />
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2 bg-white p-3 rounded-lg shadow-lg border">
-        <button
-          onClick={handleVideo}
-          className={`px-4 py-2 text-white rounded font-medium transition-colors ${
-            video ? 'bg-blue-500 hover:bg-blue-600' : 'bg-gray-500 hover:bg-gray-600'
-          }`}
-        >
-          {video ? "Video On" : "Video Off"}
-        </button>
-        
-        <button
-          onClick={handleAudio}
-          className={`px-4 py-2 text-white rounded font-medium transition-colors ${
-            audio ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-500 hover:bg-gray-600'
-          }`}
-        >
-          {audio ? "Audio On" : "Audio Off"}
-        </button>
-
-        {canRecord && (
-          <button
-            onClick={handleRecording}
-            className={`px-4 py-2 text-white rounded font-medium transition-colors ${
-              isRecording ? 'bg-red-500 hover:bg-red-600' : 'bg-orange-500 hover:bg-orange-600'
-            }`}
-          >
-            {isRecording ? "Stop Recording" : "Start Recording"}
-          </button>
-        )}
-
-        <button
-          onClick={handleEndInterview}
-          className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded font-medium transition-colors"
-        >
-          {isInterviewer ? "End Interview" : "Leave"}
-        </button>
+      {/* Anomaly Reports - Below Videos */}
+      <div className="mb-4">
+        <div className="bg-gray-800 rounded-lg p-4">
+          <h3 className="text-white text-lg font-medium mb-3">
+            Live Anomaly Feed
+          </h3>
+          <div className="max-h-32 overflow-y-auto">
+            {anomalies.length === 0 ? (
+              <p className="text-gray-400 text-sm">No anomalies detected</p>
+            ) : (
+              anomalies
+                .slice(-5)
+                .reverse()
+                .map((anomaly) => (
+                  <div
+                    key={anomaly.id}
+                    className="text-sm text-white mb-2 p-2 bg-gray-700 rounded"
+                  >
+                    <span className="text-red-400">{anomaly.timestamp}</span> -
+                    <span className="text-yellow-400 ml-1">
+                      {anomaly.type.replace("_", " ").toUpperCase()}
+                    </span>
+                    <span className="text-gray-300 ml-1">
+                      (Confidence: {(anomaly.confidence * 100).toFixed(1)}%)
+                    </span>
+                  </div>
+                ))
+            )}
+          </div>
+        </div>
       </div>
-    </div>
-  );
-};
 
-export default InterviewRoom;
+      <InterviewControls
+        video={video}
+        setVideo={setVideo}
+        audio={audio}
+        setAudio={setAudio}
+        screen={screen}
+        setScreen={setScreen}
+        newMessage={newMessage}
+        onOpenChat={openChat}
+        onEndCall={onEndCall}
+        videoAvailable={videoAvailable}
+        audioAvailable={audioAvailable}
+        screenStream={screenStream}
+        setScreenStream={setScreenStream}
+        cameraStream={cameraStream}
+        setCameraStream={setCameraStream}
+        socketRef={socketRef}
+        socketIdRef={socketIdRef}
+        localVideoRef={localVideoRef}
+      />
+
+      {showModal && (
+        <ChatModal
+          messages={messages}
+          message={message}
+          onMessageChange={handleMessage}
+          onSendMessage={sendMessage}
+          onClose={closeChat}
+        />
+      )}
+    </>
+  );
+}

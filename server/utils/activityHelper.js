@@ -65,5 +65,49 @@ export const ACTIVITY_TYPES = {
     LOGIN: 'LOGIN',
     MEETING: 'MEETING',
     INTERVIEW: 'INTERVIEW',
-    PROFILE_UPDATE: 'PROFILE_UPDATE'
+    PROFILE_UPDATE: 'PROFILE_UPDATE',
+    MALPRACTICE_DETECTION: 'MALPRACTICE_DETECTION'
+};
+
+export const validateActivityType = (type) => {
+    return Object.values(ACTIVITY_TYPES).includes(type);
+};
+
+export const createMalpracticeActivity = (userId, sessionId, type, confidence, metadata = {}) => {
+    return {
+        user_id: userId,
+        session_id: sessionId,
+        activity_type: ACTIVITY_TYPES.MALPRACTICE_DETECTION,
+        description: `Malpractice detected: ${type}`,
+        metadata: {
+            malpractice_type: type,
+            confidence_score: confidence,
+            detection_time: new Date().toISOString(),
+            severity: confidence > 0.8 ? 'high' : confidence > 0.5 ? 'medium' : 'low',
+            ...metadata
+        }
+    };
+};
+
+export const createInterviewMalpracticeActivity = (userId, sessionId, type, confidence, metadata = {}) => {
+    return {
+        user_id: userId,
+        session_id: sessionId,
+        activity_type: ACTIVITY_TYPES.MALPRACTICE_DETECTION,
+        description: `Interview malpractice detected: ${type}`,
+        metadata: {
+            malpractice_type: type,
+            confidence_score: confidence,
+            detection_time: new Date().toISOString(),
+            severity: confidence > 0.8 ? 'high' : confidence > 0.5 ? 'medium' : 'low',
+            interview_context: true,
+            ...metadata
+        }
+    };
+};
+
+export default {
+    ACTIVITY_TYPES,
+    validateActivityType,
+    createMalpracticeActivity
 };

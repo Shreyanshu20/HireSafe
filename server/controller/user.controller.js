@@ -1,7 +1,7 @@
 import { User } from '../model/user.model.js';
 import bcrypt from 'bcrypt';
 import ActivityService from '../service/activityService.js';
-import { logActivity, ACTIVITY_TYPES } from '../utils/activityHelper.js';
+import { logActivity, ACTIVITY_TYPES, validateActivityType } from '../utils/activityHelper.js';
 
 const getUserProfile = async (req, res) => {
     try {
@@ -105,6 +105,8 @@ const logUserActivity = async (req, res) => {
         const userId = req.userId;
         const { activity_type, description, metadata = {} } = req.body;
 
+        console.log('📋 Logging activity:', { userId, activity_type, description, metadata });
+
         if (!activity_type || !description) {
             return res.status(400).json({
                 success: false,
@@ -112,7 +114,22 @@ const logUserActivity = async (req, res) => {
             });
         }
 
-        const activity = await ActivityService.logActivity(userId, activity_type, description, metadata);
+        if (!validateActivityType(activity_type)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid activity type"
+            });
+        }
+
+        let enhancedMetadata = { ...metadata };
+
+        const activity = await ActivityService.logActivity(
+            userId, 
+            activity_type, 
+            description, 
+            enhancedMetadata
+        );
+
 
         res.status(201).json({
             success: true,
@@ -126,10 +143,11 @@ const logUserActivity = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Error logging activity:", error);
+        console.error("❌ Error logging activity:", error);
         res.status(500).json({
             success: false,
-            message: "Internal server error"
+            message: "Internal server error",
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 }
@@ -158,7 +176,6 @@ const getActivities = async (req, res) => {
 
         const result = await ActivityService.getUserActivities(userId, pageNum, limitNum, activity_type);
 
-        // Include stats if requested
         let activityStats = null;
         if (stats === 'true') {
             activityStats = await ActivityService.getActivityStats(userId);

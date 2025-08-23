@@ -7,7 +7,7 @@ const router = Router();
 //login
 router.post('/login', login);
 
-//logout - ✅ Add userAuth middleware to get userId
+//logout
 router.get('/logout', userAuth, logout);
 
 //register
