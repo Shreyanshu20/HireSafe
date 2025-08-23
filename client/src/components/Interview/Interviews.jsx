@@ -178,7 +178,7 @@ export default function Interviews() {
           anomalies={anomalies}
           setAnomalies={setAnomalies}
           onLeaveInterview={handleLeaveInterview}
-          interviewState={interviewState} // Add this prop
+          interviewState={interviewState} // Add this line
         />
       )}
     </>

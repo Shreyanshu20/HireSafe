@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { getUserMedia, getDisplayMedia, initializeAudioContext } from "./utils/mediaUtils";
+import { getUserMedia, getDisplayMedia, initializeAudioContext } from "./utils/mediaUtils.js";
 
 export default function InterviewControls({
   video,

@@ -75,18 +75,21 @@ export const connectToSocket = (server) => {
       
       if (interviewConnections[interviewCode] === undefined) {
         interviewConnections[interviewCode] = [];
+        interviewMessages[interviewCode] = [];
       }
       
       interviewConnections[interviewCode].push(socket.id);
       socket.join(`interview-${interviewCode}`);
       
       const clients = Array.from(io.sockets.adapter.rooms.get(`interview-${interviewCode}`) || []);
+      console.log(`Interview room ${interviewCode} clients:`, clients);
+      
       socket.to(`interview-${interviewCode}`).emit('user-joined', socket.id, clients);
       socket.emit('user-joined', socket.id, clients);
     });
 
     socket.on('interview-chat-message', (message, sender) => {
-      console.log(`Interview chat message from ${socket.id}: ${message}`);
+      console.log(`Interview chat from ${socket.id}: ${message}`);
       
       // Find interview room
       let roomCode = null;
@@ -98,9 +101,6 @@ export const connectToSocket = (server) => {
       }
       
       if (roomCode) {
-        if (interviewMessages[roomCode] === undefined) {
-          interviewMessages[roomCode] = [];
-        }
         interviewMessages[roomCode].push({ sender, message, time: new Date() });
         io.to(`interview-${roomCode}`).emit('interview-chat-message', message, sender, socket.id);
       }
@@ -119,16 +119,14 @@ export const connectToSocket = (server) => {
       }
       
       if (roomCode) {
-        socket.to(`interview-${roomCode}`).emit('code-change', {
-          ...data,
-          socketId: socket.id
-        });
+        socket.to(`interview-${roomCode}`).emit('code-change', data);
       }
     });
 
     socket.on('language-change', (data) => {
       console.log(`Language change from ${socket.id}:`, data);
       
+      // Find interview room
       let roomCode = null;
       for (const [room, clients] of Object.entries(interviewConnections)) {
         if (clients.includes(socket.id)) {
@@ -138,16 +136,14 @@ export const connectToSocket = (server) => {
       }
       
       if (roomCode) {
-        socket.to(`interview-${roomCode}`).emit('language-change', {
-          ...data,
-          socketId: socket.id
-        });
+        socket.to(`interview-${roomCode}`).emit('language-change', data);
       }
     });
 
     socket.on('malpractice-detected', (data) => {
       console.log(`Malpractice detected from ${socket.id}:`, data);
       
+      // Find interview room
       let roomCode = null;
       for (const [room, clients] of Object.entries(interviewConnections)) {
         if (clients.includes(socket.id)) {
@@ -157,11 +153,14 @@ export const connectToSocket = (server) => {
       }
       
       if (roomCode) {
+        // Send to ALL clients in the room (including the sender for now, we'll filter on client)
         io.to(`interview-${roomCode}`).emit('malpractice-detected', {
           ...data,
           socketId: socket.id,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          fromUser: socket.id !== data.reporterId ? 'interviewee' : 'interviewer' // Add role info
         });
+        console.log(`Malpractice event sent to room interview-${roomCode}`);
       }
     });
 
@@ -173,8 +172,15 @@ export const connectToSocket = (server) => {
     // =================== COMMON DISCONNECT HANDLER ===================
     socket.on('disconnect', () => {
       console.log(`User ${socket.id} disconnected`);
+      const timeDisconnected = new Date();
+      const timeDiff = timeDisconnected - timeOnline[socket.id];
+      const timeDiffMinutes = Math.floor(timeDiff / (1000 * 60));
+      console.log(`User ${socket.id} was online for ${timeDiffMinutes} minutes`);
+      
       handleMeetingDisconnect(socket);
       handleInterviewDisconnect(socket);
+      
+      delete timeOnline[socket.id];
     });
 
     // =================== HELPER FUNCTIONS ===================
