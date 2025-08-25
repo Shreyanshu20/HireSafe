@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from "react";
-import { toast } from "react-toastify";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import InterviewControls from "./InterviewControls";
 import VideoGrid from "./VideoGrid";
 import ChatModal from "./ChatModal";
+import CodeEditor from "./CodeEditor";
 import { handleEndCall } from "./utils/mediaUtils";
-import { sendCodeChange, sendInterviewMessage } from "./utils/socketUtils";
+import { sendCodeChange, sendInterviewMessage, sendOutputChange } from "./utils/socketUtils";
 
 export default function InterviewRoom({
   interviewCode,
@@ -14,10 +14,6 @@ export default function InterviewRoom({
   setVideo,
   audio,
   setAudio,
-  screen,
-  setScreen,
-  screenStream,
-  setScreenStream,
   cameraStream,
   setCameraStream,
   videoAvailable,
@@ -33,283 +29,304 @@ export default function InterviewRoom({
   const [messages, setMessages] = useState([]);
   const [message, setMessage] = useState("");
   const [newMessage, setNewMessage] = useState(0);
-  const [codeContent, setCodeContent] = useState(`// Welcome to the interview
-function solve() {
-    // Write your solution here
-    
-}`);
+  const [codeContent, setCodeContent] = useState(`console.log("Hello World!");`);
   const [selectedLanguage, setSelectedLanguage] = useState("javascript");
-  const [userRole, setUserRole] = useState("interviewee");
+  const [userRole, setUserRole] = useState("candidate");
+  
+  // Refs to prevent unnecessary re-renders
+  const codeChangeTimeoutRef = useRef(null);
+  const lastCodeChangeRef = useRef("");
+  const isUpdatingFromSocketRef = useRef(false);
 
-  // Set up chat message listener
+  // Memoized handlers to prevent re-renders
+  const handleCodeChange = useCallback((data) => {
+    if (data.code !== undefined && !isUpdatingFromSocketRef.current) {
+      isUpdatingFromSocketRef.current = true;
+      setCodeContent(data.code);
+      lastCodeChangeRef.current = data.code;
+      
+      // Reset flag after a short delay
+      setTimeout(() => {
+        isUpdatingFromSocketRef.current = false;
+      }, 100);
+    }
+  }, []);
+
+  const handleLanguageChange = useCallback((data) => {
+    if (data.language !== undefined) {
+      setSelectedLanguage(data.language);
+    }
+  }, []);
+
+  const handleInterviewMessage = useCallback((message, sender, socketIdSender) => {
+    setMessages((prevMessages) => [
+      ...prevMessages,
+      { sender: sender, data: message },
+    ]);
+    if (socketIdSender !== socketIdRef.current) {
+      setNewMessage((prevNewMessage) => prevNewMessage + 1);
+    }
+  }, [socketIdRef]);
+
   useEffect(() => {
     if (socketRef.current) {
-      // Handle interview chat
-      socketRef.current.on("interview-chat-message", addMessage);
-      
-      // Handle malpractice events for interviewer
+      // Remove existing listeners
+      socketRef.current.off("interview-chat-message");
+      socketRef.current.off("malpractice-detected");
+      socketRef.current.off("code-change");
+      socketRef.current.off("language-change");
+
+      // Add new listeners
+      socketRef.current.on("interview-chat-message", handleInterviewMessage);
+      socketRef.current.on("code-change", handleCodeChange);
+      socketRef.current.on("language-change", handleLanguageChange);
+
       if (userRole === "interviewer") {
         socketRef.current.on("malpractice-detected", (data) => {
-          console.log("🚨 Malpractice event received by interviewer:", data);
-          
-          // Only add if it's from the interviewee (not from interviewer's own overlay)
           if (data.socketId !== socketIdRef.current) {
             setAnomalies((prev) => [
               ...prev,
               {
-                id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, // Unique ID
+                id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                 type: data.type,
                 confidence: data.confidence,
                 timestamp: new Date().toLocaleTimeString(),
                 description: data.message || data.description,
-                rawTimestamp: Date.now(), // For sorting
+                rawTimestamp: Date.now(),
               },
             ]);
-            console.log("✅ Anomaly added to interviewer dashboard");
           }
         });
       }
     }
 
-    // Global handlers for code sync
-    window.handleCodeChange = (data) => {
-      if (data.code !== undefined) {
-        setCodeContent(data.code);
-      }
-    };
-
-    window.handleLanguageChange = (data) => {
-      if (data.language !== undefined) {
-        setSelectedLanguage(data.language);
-      }
-    };
-
-    window.handleInterviewMessage = (message, sender, socketIdSender) => {
-      addMessage(message, sender, socketIdSender);
-    };
-
     return () => {
       if (socketRef.current) {
-        socketRef.current.off("interview-chat-message", addMessage);
-        if (userRole === "interviewer") {
-          socketRef.current.off("malpractice-detected");
-        }
+        socketRef.current.off("interview-chat-message", handleInterviewMessage);
+        socketRef.current.off("code-change", handleCodeChange);
+        socketRef.current.off("language-change", handleLanguageChange);
+        socketRef.current.off("malpractice-detected");
       }
-      delete window.handleCodeChange;
-      delete window.handleLanguageChange;
-      delete window.handleInterviewMessage;
     };
-  }, [socketRef, userRole]);
+  }, [socketRef, userRole, handleInterviewMessage, handleCodeChange, handleLanguageChange, socketIdRef]);
 
   useEffect(() => {
     if (interviewState === "create") {
       setUserRole("interviewer");
     } else {
-      setUserRole("interviewee");
+      setUserRole("candidate");
     }
   }, [interviewState]);
 
-  const addMessage = (data, sender, socketIdSender) => {
-    setMessages((prevMessages) => [
-      ...prevMessages,
-      { sender: sender, data: data },
-    ]);
-    if (socketIdSender !== socketIdRef.current) {
-      setNewMessage((prevNewMessage) => prevNewMessage + 1);
+  const onCodeEdit = useCallback((newCode) => {
+    // Prevent loop if this update came from socket
+    if (isUpdatingFromSocketRef.current || newCode === lastCodeChangeRef.current) {
+      return;
     }
-  };
 
-  const onCodeEdit = (newCode) => {
     setCodeContent(newCode);
-    sendCodeChange(socketRef, newCode, selectedLanguage, interviewCode);
-  };
+    lastCodeChangeRef.current = newCode;
 
-  const onLanguageChange = (newLanguage) => {
+    // Debounce code changes to prevent too many socket emissions
+    if (codeChangeTimeoutRef.current) {
+      clearTimeout(codeChangeTimeoutRef.current);
+    }
+
+    codeChangeTimeoutRef.current = setTimeout(() => {
+      sendCodeChange(socketRef, newCode, selectedLanguage, interviewCode);
+    }, 500); // 500ms debounce
+  }, [socketRef, selectedLanguage, interviewCode]);
+
+  const onLanguageChange = useCallback((newLanguage) => {
     setSelectedLanguage(newLanguage);
     if (socketRef.current) {
       socketRef.current.emit("language-change", {
         language: newLanguage,
       });
     }
-  };
+  }, [socketRef]);
 
-  const sendMessage = () => {
+  const sendMessage = useCallback(() => {
     if (message.trim()) {
       sendInterviewMessage(socketRef, message, "You");
       setMessage("");
     }
-  };
+  }, [message, socketRef]);
 
-  const openChat = () => {
+  const openChat = useCallback(() => {
     setShowModal(true);
     setNewMessage(0);
-  };
+  }, []);
 
-  const closeChat = () => {
+  const closeChat = useCallback(() => {
     setShowModal(false);
-  };
+  }, []);
 
-  const handleMessage = (e) => {
+  const handleMessage = useCallback((e) => {
     setMessage(e.target.value);
-  };
+  }, []);
 
-  const onEndCall = () => {
-    handleEndCall({ cameraStream, screenStream, socketRef });
+  const onEndCall = useCallback(() => {
+    // Clear timeouts
+    if (codeChangeTimeoutRef.current) {
+      clearTimeout(codeChangeTimeoutRef.current);
+    }
+    
+    handleEndCall({ cameraStream, socketRef });
     onLeaveInterview();
-  };
+  }, [cameraStream, socketRef, onLeaveInterview]);
 
-  // Update the anomaly mapping in InterviewRoom.jsx
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (codeChangeTimeoutRef.current) {
+        clearTimeout(codeChangeTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const getAnomalyInfo = (type) => {
     const anomalyMap = {
-      // Critical Interview Violations
-      multiple_people: { 
-        icon: "👥", 
-        color: "text-red-500", 
-        severity: "critical", 
+      multiple_people: {
+        icon: "👥",
+        color: "text-red-500",
+        severity: "critical",
         category: "Cheating",
-        priority: 1
+        priority: 1,
       },
-      candidate_absent: { 
-        icon: "❌", 
-        color: "text-red-500", 
-        severity: "critical", 
+      candidate_absent: {
+        icon: "❌",
+        color: "text-red-500",
+        severity: "critical",
         category: "Presence",
-        priority: 1
+        priority: 1,
       },
-      
-      // Suspicious Behavior
-      looking_away_extended: { 
-        icon: "👀", 
-        color: "text-orange-500", 
-        severity: "warning", 
+      looking_away_extended: {
+        icon: "👀",
+        color: "text-orange-500",
+        severity: "warning",
         category: "Attention",
-        priority: 2
+        priority: 2,
       },
-      suspicious_head_movement: { 
-        icon: "🔄", 
-        color: "text-orange-500", 
-        severity: "warning", 
+      suspicious_head_movement: {
+        icon: "🔄",
+        color: "text-orange-500",
+        severity: "warning",
         category: "Behavior",
-        priority: 2
+        priority: 2,
       },
-      reading_behavior: { 
-        icon: "📖", 
-        color: "text-orange-500", 
-        severity: "warning", 
+      reading_behavior: {
+        icon: "📖",
+        color: "text-orange-500",
+        severity: "warning",
         category: "Cheating",
-        priority: 2
+        priority: 2,
       },
-      
-      // Attention Issues
-      eyes_closed_extended: { 
-        icon: "😴", 
-        color: "text-yellow-500", 
-        severity: "moderate", 
+      eyes_closed_extended: {
+        icon: "😴",
+        color: "text-yellow-500",
+        severity: "moderate",
         category: "Attention",
-        priority: 3
+        priority: 3,
       },
-      high_stress_detected: { 
-        icon: "😰", 
-        color: "text-yellow-500", 
-        severity: "moderate", 
+      high_stress_detected: {
+        icon: "😰",
+        color: "text-yellow-500",
+        severity: "moderate",
         category: "Behavior",
-        priority: 3
+        priority: 3,
       },
-      
-      // Technical Issues
-      candidate_too_far: { 
-        icon: "📏", 
-        color: "text-blue-500", 
-        severity: "minor", 
+      candidate_too_far: {
+        icon: "📏",
+        color: "text-blue-500",
+        severity: "minor",
         category: "Technical",
-        priority: 4
+        priority: 4,
       },
-      candidate_too_close: { 
-        icon: "🔍", 
-        color: "text-blue-500", 
-        severity: "minor", 
+      candidate_too_close: {
+        icon: "🔍",
+        color: "text-blue-500",
+        severity: "minor",
         category: "Technical",
-        priority: 4
+        priority: 4,
       },
-      poor_video_quality: { 
-        icon: "📹", 
-        color: "text-gray-500", 
-        severity: "minor", 
+      poor_video_quality: {
+        icon: "📹",
+        color: "text-gray-500",
+        severity: "minor",
         category: "Technical",
-        priority: 4
+        priority: 4,
       },
-      poor_lighting: { 
-        icon: "💡", 
-        color: "text-gray-500", 
-        severity: "minor", 
+      poor_lighting: {
+        icon: "💡",
+        color: "text-gray-500",
+        severity: "minor",
         category: "Technical",
-        priority: 4
+        priority: 4,
       },
-      
-      // Identity Verification
-      age_verification_concern: { 
-        icon: "🆔", 
-        color: "text-purple-500", 
-        severity: "moderate", 
+      age_verification_concern: {
+        icon: "🆔",
+        color: "text-purple-500",
+        severity: "moderate",
         category: "Identity",
-        priority: 3
+        priority: 3,
       },
-      
-      // Basic Detection Fallbacks
-      no_movement_detected: { 
-        icon: "⏸️", 
-        color: "text-red-500", 
-        severity: "critical", 
+      no_movement_detected: {
+        icon: "⏸️",
+        color: "text-red-500",
+        severity: "critical",
         category: "Presence",
-        priority: 1
+        priority: 1,
       },
     };
-    
-    return anomalyMap[type] || { 
-      icon: "⚠️", 
-      color: "text-gray-500", 
-      severity: "minor", 
-      category: "Unknown",
-      priority: 5
-    };
+
+    return (
+      anomalyMap[type] || {
+        icon: "⚠️",
+        color: "text-gray-500",
+        severity: "minor",
+        category: "Unknown",
+        priority: 5,
+      }
+    );
   };
 
-  // Get severity counts
   const getSeverityCounts = () => {
     const counts = {
       critical: 0,
       warning: 0,
       moderate: 0,
-      minor: 0
+      minor: 0,
     };
-    
-    anomalies.forEach(anomaly => {
+
+    anomalies.forEach((anomaly) => {
       const info = getAnomalyInfo(anomaly.type);
       counts[info.severity] = (counts[info.severity] || 0) + 1;
     });
-    
+
     return counts;
   };
 
-  // Sort anomalies by priority and timestamp
   const sortedAnomalies = [...anomalies]
     .sort((a, b) => {
-      // First sort by timestamp (newest first) - PRIMARY SORT
       const timeA = a.rawTimestamp || 0;
       const timeB = b.rawTimestamp || 0;
-      
+
       if (timeA !== timeB) {
-        return timeB - timeA; // Newest first
+        return timeB - timeA;
       }
-      
-      // If timestamps are equal, then sort by priority (lower number = higher priority)
+
       const aInfo = getAnomalyInfo(a.type);
       const bInfo = getAnomalyInfo(b.type);
       return aInfo.priority - bInfo.priority;
     })
-    .slice(0, 10); // Show only top 10 most recent anomalies
+    .slice(0, 10);
 
   const severityCounts = getSeverityCounts();
+
+  const onOutputChange = useCallback((newOutput) => {
+    sendOutputChange(socketRef, newOutput, interviewCode);
+  }, [socketRef, interviewCode]);
 
   return (
     <>
@@ -317,74 +334,42 @@ function solve() {
         <div>
           <strong>Interview Code: {interviewCode}</strong>
           <span className="ml-4 text-sm text-gray-600">
-            Role: {userRole === "interviewer" ? "Interviewer" : "Interviewee"}
+            Role: {userRole === "interviewer" ? "Interviewer" : "Candidate"}
           </span>
-        </div>
-        <div className="text-sm text-gray-500">
-          {userRole === "interviewer" && "🔍 AI Monitoring Active"}
         </div>
       </div>
 
-      {/* Main Layout: Code Editor on Left, Videos on Right */}
       <div className="flex gap-4 mb-4">
-        {/* Code Editor - Left Side */}
         <div className="w-1/2">
-          <div className="bg-gray-900 rounded-lg border border-gray-700">
-            <div className="flex items-center justify-between p-3 border-b border-gray-700">
-              <h3 className="text-white text-sm font-medium">Code Editor</h3>
-              <div className="flex items-center space-x-2">
-                <select
-                  value={selectedLanguage}
-                  onChange={(e) => onLanguageChange(e.target.value)}
-                  className="bg-gray-800 text-white text-xs rounded px-2 py-1 border border-gray-600"
-                >
-                  <option value="javascript">JavaScript</option>
-                  <option value="python">Python</option>
-                  <option value="java">Java</option>
-                  <option value="cpp">C++</option>
-                </select>
-                <button className="bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-1 rounded">
-                  Run
-                </button>
-              </div>
-            </div>
-
-            <div className="p-4">
-              <textarea
-                value={codeContent}
-                onChange={(e) => onCodeEdit(e.target.value)}
-                className="w-full h-[400px] bg-gray-800 text-white text-sm font-mono resize-none border-none outline-none"
-                style={{ fontFamily: "Monaco, Consolas, monospace" }}
-                placeholder="// Start coding here..."
-              />
-            </div>
-          </div>
+          <CodeEditor
+            value={codeContent}
+            onChange={onCodeEdit}
+            language={selectedLanguage}
+            onLanguageChange={onLanguageChange}
+            onOutputChange={onOutputChange}
+            height="400px"
+            theme="vs-dark"
+          />
         </div>
 
-        {/* Video Grid - Right Side */}
         <div className="w-1/2">
           <VideoGrid
             localVideoRef={localVideoRef}
             videos={videos}
-            screen={screen}
-            screenStream={screenStream}
             socketRef={socketRef}
             interviewCode={interviewCode}
             isInterviewer={userRole === "interviewer"}
-            onAnomalyDetected={(anomaly) => {
-              console.log("Anomaly detected locally:", anomaly);
-            }}
+            onAnomalyDetected={(anomaly) => {}}
           />
         </div>
       </div>
 
-      {/* Enhanced Anomaly Reports - Only show to interviewer */}
       {userRole === "interviewer" && (
         <div className="mb-4">
           <div className="bg-gray-800 rounded-lg p-4">
             <div className="flex justify-between items-center mb-3">
               <h3 className="text-white text-lg font-medium">
-                🔍 Live Anomaly Monitoring
+                Live Anomaly Monitoring
               </h3>
               <div className="flex items-center space-x-4 text-sm">
                 <span className="text-green-400">● Live</span>
@@ -392,47 +377,57 @@ function solve() {
               </div>
             </div>
 
-            {/* Severity Summary Bar */}
             <div className="mb-4 grid grid-cols-4 gap-2">
               <div className="bg-red-600 bg-opacity-20 p-2 rounded text-center">
-                <div className="text-red-400 text-lg font-bold">{severityCounts.critical}</div>
+                <div className="text-red-400 text-lg font-bold">
+                  {severityCounts.critical}
+                </div>
                 <div className="text-xs text-red-300">Critical</div>
               </div>
               <div className="bg-yellow-600 bg-opacity-20 p-2 rounded text-center">
-                <div className="text-yellow-400 text-lg font-bold">{severityCounts.warning}</div>
+                <div className="text-yellow-400 text-lg font-bold">
+                  {severityCounts.warning}
+                </div>
                 <div className="text-xs text-yellow-300">Warning</div>
               </div>
               <div className="bg-orange-600 bg-opacity-20 p-2 rounded text-center">
-                <div className="text-orange-400 text-lg font-bold">{severityCounts.moderate}</div>
+                <div className="text-orange-400 text-lg font-bold">
+                  {severityCounts.moderate}
+                </div>
                 <div className="text-xs text-orange-300">Moderate</div>
               </div>
               <div className="bg-blue-600 bg-opacity-20 p-2 rounded text-center">
-                <div className="text-blue-400 text-lg font-bold">{severityCounts.minor}</div>
+                <div className="text-blue-400 text-lg font-bold">
+                  {severityCounts.minor}
+                </div>
                 <div className="text-xs text-blue-300">Minor</div>
               </div>
             </div>
-            
+
             <div className="max-h-48 overflow-y-auto">
               {anomalies.length === 0 ? (
                 <div className="text-center py-8">
                   <div className="text-4xl mb-2">✅</div>
                   <p className="text-gray-400 text-sm">No anomalies detected</p>
-                  <p className="text-gray-500 text-xs">Candidate behavior appears normal</p>
+                  <p className="text-gray-500 text-xs">
+                    Candidate behavior appears normal
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {sortedAnomalies.map((anomaly) => {
                     const info = getAnomalyInfo(anomaly.type);
-                    const bgColor = {
-                      critical: "bg-red-900 border-red-500",
-                      warning: "bg-yellow-900 border-yellow-500",
-                      moderate: "bg-orange-900 border-orange-500",
-                      minor: "bg-blue-900 border-blue-500"
-                    }[info.severity] || "bg-gray-900 border-gray-500";
+                    const bgColor =
+                      {
+                        critical: "bg-red-900 border-red-500",
+                        warning: "bg-yellow-900 border-yellow-500",
+                        moderate: "bg-orange-900 border-orange-500",
+                        minor: "bg-blue-900 border-blue-500",
+                      }[info.severity] || "bg-gray-900 border-gray-500";
 
                     return (
                       <div
-                        key={anomaly.id} // Now using unique ID
+                        key={anomaly.id}
                         className={`p-3 ${bgColor} rounded-lg border-l-4 transition-all duration-200 hover:bg-opacity-80`}
                       >
                         <div className="flex items-center justify-between">
@@ -440,8 +435,12 @@ function solve() {
                             <span className="text-2xl">{info.icon}</span>
                             <div className="flex-1">
                               <div className="flex items-center space-x-2">
-                                <span className={`font-bold ${info.color} text-sm`}>
-                                  {anomaly.type.replace(/[_-]/g, " ").toUpperCase()}
+                                <span
+                                  className={`font-bold ${info.color} text-sm`}
+                                >
+                                  {anomaly.type
+                                    .replace(/[_-]/g, " ")
+                                    .toUpperCase()}
                                 </span>
                                 <span className="text-xs bg-gray-700 px-2 py-1 rounded">
                                   {info.category}
@@ -453,15 +452,17 @@ function solve() {
                             </div>
                           </div>
                           <div className="text-right flex flex-col items-end space-y-1">
-                            <div className={`text-xs px-2 py-1 rounded font-bold ${
-                              info.severity === "critical"
-                                ? "bg-red-600 text-white"
-                                : info.severity === "warning"
-                                ? "bg-yellow-600 text-black"
-                                : info.severity === "moderate"
-                                ? "bg-orange-600 text-white"
-                                : "bg-blue-600 text-white"
-                            }`}>
+                            <div
+                              className={`text-xs px-2 py-1 rounded font-bold ${
+                                info.severity === "critical"
+                                  ? "bg-red-600 text-white"
+                                  : info.severity === "warning"
+                                  ? "bg-yellow-600 text-black"
+                                  : info.severity === "moderate"
+                                  ? "bg-orange-600 text-white"
+                                  : "bg-blue-600 text-white"
+                              }`}
+                            >
                               {(anomaly.confidence * 100).toFixed(0)}%
                             </div>
                             <div className="text-xs text-gray-400">
@@ -476,18 +477,23 @@ function solve() {
               )}
             </div>
 
-            {/* Risk Assessment */}
             {anomalies.length > 0 && (
               <div className="mt-4 pt-3 border-t border-gray-700">
                 <div className="text-center">
-                  <div className={`text-lg font-bold ${
-                    severityCounts.critical > 0 ? "text-red-400" :
-                    severityCounts.warning > 2 ? "text-yellow-400" :
-                    "text-green-400"
-                  }`}>
-                    {severityCounts.critical > 0 ? "HIGH RISK" :
-                     severityCounts.warning > 2 ? "MODERATE RISK" :
-                     "LOW RISK"}
+                  <div
+                    className={`text-lg font-bold ${
+                      severityCounts.critical > 0
+                        ? "text-red-400"
+                        : severityCounts.warning > 2
+                        ? "text-yellow-400"
+                        : "text-green-400"
+                    }`}
+                  >
+                    {severityCounts.critical > 0
+                      ? "HIGH RISK"
+                      : severityCounts.warning > 2
+                      ? "MODERATE RISK"
+                      : "LOW RISK"}
                   </div>
                   <div className="text-xs text-gray-400 mt-1">
                     Overall Interview Assessment
@@ -504,15 +510,11 @@ function solve() {
         setVideo={setVideo}
         audio={audio}
         setAudio={setAudio}
-        screen={screen}
-        setScreen={setScreen}
         newMessage={newMessage}
         onOpenChat={openChat}
         onEndCall={onEndCall}
         videoAvailable={videoAvailable}
         audioAvailable={audioAvailable}
-        screenStream={screenStream}
-        setScreenStream={setScreenStream}
         cameraStream={cameraStream}
         setCameraStream={setCameraStream}
         socketRef={socketRef}

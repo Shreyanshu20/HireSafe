@@ -17,8 +17,6 @@ export default function Interviews() {
   const [audioAvailable, setAudioAvailable] = useState(true);
   const [video, setVideo] = useState(false);
   const [audio, setAudio] = useState(false);
-  const [screen, setScreen] = useState(false);
-  const [screenAvailable, setScreenAvailable] = useState(false);
   const [interviewCode, setInterviewCode] = useState();
   const [interviewState, setInterviewState] = useState("join");
   const [askForInterviewCode, setAskForInterviewCode] = useState(true);
@@ -26,10 +24,8 @@ export default function Interviews() {
   const [isCreatingInterview, setIsCreatingInterview] = useState(false);
   const [videos, setVideos] = useState([]);
   const [cameraStream, setCameraStream] = useState(null);
-  const [screenStream, setScreenStream] = useState(null);
   const [anomalies, setAnomalies] = useState([]);
 
-  // Check authentication
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       toast.error("Please log in to access interviews");
@@ -37,10 +33,8 @@ export default function Interviews() {
     }
   }, [isAuthenticated, isLoading]);
 
-  // Check permissions and restore state
   useEffect(() => {
     if (isAuthenticated) {
-      // Check permissions
       const checkPermissions = async () => {
         try {
           await navigator.mediaDevices.getUserMedia({
@@ -54,18 +48,10 @@ export default function Interviews() {
           setVideoAvailable(false);
           setAudioAvailable(false);
         }
-
-        try {
-          // Don't actually start screen share, just check if available
-          setScreenAvailable(true);
-        } catch (error) {
-          setScreenAvailable(false);
-        }
       };
 
       checkPermissions();
 
-      // Restore interview state
       const savedInterviewCode = sessionStorage.getItem("currentInterviewCode");
       const savedInterviewState = sessionStorage.getItem(
         "currentInterviewState"
@@ -96,7 +82,6 @@ export default function Interviews() {
     setAudio(true);
     setAskForInterviewCode(false);
 
-    // Save to sessionStorage
     sessionStorage.setItem("currentInterviewCode", interviewCode);
     sessionStorage.setItem("currentInterviewState", interviewState);
     sessionStorage.setItem("inInterview", "true");
@@ -119,7 +104,6 @@ export default function Interviews() {
     setAnomalies([]);
     setVideo(false);
     setAudio(false);
-    setScreen(false);
   };
 
   if (isLoading) {
@@ -165,10 +149,6 @@ export default function Interviews() {
           setVideo={setVideo}
           audio={audio}
           setAudio={setAudio}
-          screen={screen}
-          setScreen={setScreen}
-          screenStream={screenStream}
-          setScreenStream={setScreenStream}
           cameraStream={cameraStream}
           setCameraStream={setCameraStream}
           videoAvailable={videoAvailable}
@@ -178,7 +158,7 @@ export default function Interviews() {
           anomalies={anomalies}
           setAnomalies={setAnomalies}
           onLeaveInterview={handleLeaveInterview}
-          interviewState={interviewState} // Add this line
+          interviewState={interviewState}
         />
       )}
     </>

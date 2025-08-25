@@ -36,7 +36,6 @@ export const connectToInterviewSocketServer = ({
     console.log("✅ Connected to interview server with ID:", socketRef.current.id);
     socketIdRef.current = socketRef.current.id;
     
-    // Join interview room
     socketRef.current.emit("join-interview", interviewCode);
     toast.success("Connected to interview session!");
   });
@@ -85,18 +84,10 @@ export const connectToInterviewSocketServer = ({
     }
   });
 
-  socketRef.current.on("interview-chat-message", (message, sender, socketIdSender) => {
-    console.log("💬 Chat message received:", { message, sender, socketIdSender });
-    if (window.handleInterviewMessage) {
-      window.handleInterviewMessage(message, sender, socketIdSender);
-    }
-  });
-
   socketRef.current.on("code-change", (data) => {
     console.log("💻 Code change received:", data);
-    if (window.handleCodeChange) {
-      window.handleCodeChange(data);
-    }
+    const event = new CustomEvent('interviewCodeChange', { detail: data });
+    window.dispatchEvent(event);
   });
 
   socketRef.current.on("language-change", (data) => {
@@ -104,6 +95,13 @@ export const connectToInterviewSocketServer = ({
     if (window.handleLanguageChange) {
       window.handleLanguageChange(data);
     }
+  });
+
+  // Add output change listener
+  socketRef.current.on("output-change", (data) => {
+    console.log("📤 Output change received:", data);
+    const event = new CustomEvent('interviewOutputChange', { detail: data });
+    window.dispatchEvent(event);
   });
 
   socketRef.current.on("disconnect", (reason) => {
@@ -160,7 +158,6 @@ const gotMessageFromServer = async (fromId, message, socketRef, socketIdRef) => 
 const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, videoRef) => {
   console.log("🚀 Handling user joined:", id, "Current clients:", clients);
   
-  // Clean up existing connections first
   clients.forEach(socketListId => {
     if (socketListId !== socketIdRef.current && connections[socketListId]) {
       console.log("🧹 Cleaning up existing connection:", socketListId);
@@ -174,10 +171,8 @@ const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, 
     
     console.log("🔗 Setting up connection for:", socketListId);
     
-    // Create new peer connection
     connections[socketListId] = new RTCPeerConnection(peerConfigConnections);
     
-    // Set up ICE candidate handler
     connections[socketListId].onicecandidate = (event) => {
       if (event.candidate) {
         console.log("🧊 Sending ICE candidate to:", socketListId);
@@ -191,7 +186,6 @@ const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, 
       }
     };
 
-    // Set up connection state change handler
     connections[socketListId].onconnectionstatechange = () => {
       const state = connections[socketListId].connectionState;
       console.log(`🔗 Connection state for ${socketListId}:`, state);
@@ -203,7 +197,6 @@ const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, 
       }
     };
 
-    // Set up track handler for receiving remote stream
     connections[socketListId].ontrack = (event) => {
       console.log("📹 Received track from:", socketListId, "Streams:", event.streams.length);
       const [stream] = event.streams;
@@ -239,7 +232,6 @@ const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, 
       }
     };
 
-    // Get local stream and add tracks
     const localStream = window.localStream;
     if (localStream && localStream.getTracks().length > 0) {
       console.log("📤 Adding local stream tracks to peer connection for:", socketListId);
@@ -250,7 +242,6 @@ const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, 
     } else {
       console.warn("⚠️ No local stream available when setting up connection for:", socketListId);
       
-      // Try to get user media if not available
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: true,
@@ -267,7 +258,6 @@ const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, 
     }
   }
 
-  // Create offers for connections where this user should initiate
   if (id === socketIdRef.current) {
     console.log("📞 Creating offers as the joining user");
     for (const socketListId of clients) {
@@ -299,7 +289,6 @@ const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, 
 export const disconnectFromInterviewServer = (socketRef) => {
   console.log("🔌 Disconnecting from interview server...");
   
-  // Clean up connections
   for (const id in connections) {
     if (connections[id]) {
       connections[id].close();
@@ -327,6 +316,19 @@ export const sendCodeChange = (socketRef, code, language, interviewCode) => {
       meetingCode: interviewCode,
       code,
       language,
+      timestamp: Date.now()
+    });
+  }
+};
+
+// Add new function for output sync
+export const sendOutputChange = (socketRef, output, interviewCode) => {
+  if (socketRef.current) {
+    console.log("📤 Sending output change");
+    socketRef.current.emit("output-change", {
+      meetingCode: interviewCode,
+      output,
+      timestamp: Date.now()
     });
   }
 };

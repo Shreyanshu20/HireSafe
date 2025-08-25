@@ -140,6 +140,23 @@ export const connectToSocket = (server) => {
       }
     });
 
+    socket.on('output-change', (data) => {
+      console.log(`Output change from ${socket.id}:`, data);
+      
+      // Find interview room
+      let roomCode = null;
+      for (const [room, clients] of Object.entries(interviewConnections)) {
+        if (clients.includes(socket.id)) {
+          roomCode = room;
+          break;
+        }
+      }
+      
+      if (roomCode) {
+        socket.to(`interview-${roomCode}`).emit('output-change', data);
+      }
+    });
+
     socket.on('malpractice-detected', (data) => {
       console.log(`Malpractice detected from ${socket.id}:`, data);
       
