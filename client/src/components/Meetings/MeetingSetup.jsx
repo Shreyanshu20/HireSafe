@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { toast } from "react-toastify";
 import axios from "axios";
 
@@ -9,12 +9,11 @@ const client = axios.create({
   withCredentials: true,
 });
 
-// Add the same interceptors as AuthContext
 client.interceptors.request.use((config) => {
-  const token = localStorage.getItem('userToken');
+  const token = localStorage.getItem("userToken");
   if (token) {
-    config.headers['x-auth-token'] = token;
-    config.headers['Authorization'] = `Bearer ${token}`;
+    config.headers["x-auth-token"] = token;
+    config.headers["Authorization"] = `Bearer ${token}`;
   }
   return config;
 });
@@ -22,9 +21,8 @@ client.interceptors.request.use((config) => {
 const generateMeetingCode = () => {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let result = "";
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < 9; i++)
     result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
   return result;
 };
 
@@ -38,8 +36,9 @@ export default function MeetingSetup({
   isCreatingMeeting,
   setIsCreatingMeeting,
   localVideoRef,
-  onJoinMeeting
+  onJoinMeeting,
 }) {
+  const [copied, setCopied] = useState(false);
 
   const handleCreateMeeting = async () => {
     setIsCreatingMeeting(true);
@@ -48,126 +47,297 @@ export default function MeetingSetup({
 
     while (attempts < maxAttempts) {
       const newMeetingCode = generateMeetingCode();
-      
       try {
-        const response = await client.post("/meeting/create", {
+        const res = await client.post("/meeting/create", {
           meeting_code: newMeetingCode,
         });
-
-        if (response.data.success) {
+        if (res.data.success) {
           setMeetingCode(newMeetingCode);
           setMeetingState("create");
           toast.success("Meeting created successfully!");
           break;
         }
-      } catch (error) {
-        console.error("Error creating meeting:", error);
-        if (error.response?.data?.message?.includes("already exists")) {
+      } catch (err) {
+        if (err.response?.data?.message?.includes("already exists")) {
           attempts++;
-          if (attempts >= maxAttempts) {
-            toast.error("Failed to generate unique meeting code. Please try again.");
-          }
+          if (attempts >= maxAttempts)
+            toast.error(
+              "Failed to generate unique meeting code. Please try again."
+            );
           continue;
         } else {
-          const errorMessage = error.response?.data?.message || "Failed to create meeting. Please try again.";
-          toast.error(errorMessage);
+          toast.error(
+            err.response?.data?.message ||
+              "Failed to create meeting. Please try again."
+          );
           break;
         }
       }
     }
-    
     setIsCreatingMeeting(false);
   };
 
   const connectToMeeting = async () => {
-    if (!meetingCode) {
+    if (meetingState === "join" && !meetingCode) {
       toast.error("Please enter a meeting code");
       return;
     }
-
     setIsValidatingCode(true);
-
     try {
       if (meetingState === "create") {
         onJoinMeeting();
       } else {
-        const response = await client.post("/meeting/join", {
+        const res = await client.post("/meeting/join", {
           meeting_code: meetingCode,
         });
-
-        if (response.data.success) {
+        if (res.data.success) {
           onJoinMeeting();
           toast.success("Joining meeting...");
         }
       }
-    } catch (error) {
-      console.error("Error validating meeting code:", error);
-      const errorMessage = error.response?.data?.message || "Failed to validate meeting code. Please try again.";
-      toast.error(errorMessage);
+    } catch (err) {
+      console.error("Error validating meeting code:", err);
+      toast.error(
+        err.response?.data?.message ||
+          "Failed to validate meeting code. Please try again."
+      );
     } finally {
       setIsValidatingCode(false);
     }
   };
 
+  const copyCode = async () => {
+    if (!meetingCode) return;
+    try {
+      await navigator.clipboard.writeText(meetingCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch {
+      toast.info("Tap and long-press to copy on mobile.");
+    }
+  };
+
   return (
-    <>
-      <h1>Meetings</h1>
+    <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 py-6 sm:py-10">
+      {/* Card wrapper */}
+      <div className="rounded-2xl bg-gradient-to-br from-slate-900/80 to-slate-800/70 backdrop-blur border border-white/10 shadow-2xl">
+        {/* Header / Tabs */}
+        <div className="flex flex-col gap-4 sm:gap-5 md:flex-row md:items-center md:justify-between p-4 sm:p-6 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-blue-600/20 flex items-center justify-center shrink-0">
+              <i className="fa-solid fa-video text-blue-400"></i>
+            </div>
+            <div>
+              <h1 className="text-white text-xl sm:text-2xl font-bold leading-tight">
+                Meetings
+              </h1>
+              <p className="text-slate-300 text-xs sm:text-sm">
+                Create a new meeting or join with a code. Preview your camera
+                below.
+              </p>
+            </div>
+          </div>
 
-      <button 
-        onClick={handleCreateMeeting}
-        disabled={isCreatingMeeting}
-        className="bg-green-500 text-white px-4 py-2 rounded mr-2 disabled:bg-gray-400"
-      >
-        {isCreatingMeeting ? "Creating..." : "Create a Meeting"}
-      </button>
-
-      <button 
-        onClick={() => setMeetingState("join")}
-        className="bg-blue-500 text-white px-4 py-2 rounded"
-      >
-        Join a Meeting
-      </button>
-      <br />
-
-      {meetingState === "create" ? (
-        <div className="mt-4">
-          <h2>Create a meeting</h2>
-          <div>
-            <p>Meeting Code:</p>
-            <p className="font-bold text-lg">{meetingCode || "Generating..."}</p>
+          {/* Tabs */}
+          <div className="inline-flex w-full md:w-auto items-center rounded-xl bg-slate-900/60 border border-white/10 p-1">
+            <button
+              onClick={() => setMeetingState("create")}
+              className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-sm font-semibold transition ${
+                meetingState === "create"
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-200 hover:bg-slate-800"
+              }`}
+              disabled={isCreatingMeeting}
+              aria-pressed={meetingState === "create"}
+            >
+              <i className="fa-solid fa-plus mr-2"></i>Create
+            </button>
+            <button
+              onClick={() => setMeetingState("join")}
+              className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-sm font-semibold transition ${
+                meetingState === "join"
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-200 hover:bg-slate-800"
+              }`}
+              aria-pressed={meetingState === "join"}
+            >
+              <i className="fa-solid fa-right-to-bracket mr-2"></i>Join
+            </button>
           </div>
         </div>
-      ) : (
-        <div className="mt-4">
-          <h2>Join a meeting</h2>
-          <input
-            type="text"
-            placeholder="Enter meeting code"
-            value={meetingCode || ""}
-            onChange={(e) => setMeetingCode(e.target.value.toUpperCase())}
-            className="border border-gray-300 p-2 rounded mr-2"
-            maxLength="9"
-          />
-        </div>
-      )}
 
-      <div className="mt-4">
-        <video
-          ref={localVideoRef}
-          autoPlay
-          muted
-          playsInline
-          className="w-[300px] h-[200px] bg-gray-800 rounded"
-        ></video>
+        {/* Body */}
+        <div className="grid gap-6 sm:gap-8 p-4 sm:p-6 lg:grid-cols-2">
+          {/* Left column */}
+          <div className="space-y-6">
+            {meetingState === "create" ? (
+              <div className="space-y-4">
+                <h2 className="text-white text-base sm:text-lg font-semibold flex items-center gap-2">
+                  <i className="fa-solid fa-bolt text-yellow-400"></i> Create a
+                  meeting
+                </h2>
+
+                {/* Code panel */}
+                <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-slate-300 text-xs sm:text-sm">
+                      Meeting Code
+                    </p>
+                    <p className="text-white font-mono tracking-widest text-xl sm:text-2xl break-words">
+                      {meetingCode || "— — — — — — — — —"}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={handleCreateMeeting}
+                      disabled={isCreatingMeeting}
+                      className="w-full sm:w-auto px-4 py-2 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 transition"
+                    >
+                      {isCreatingMeeting ? (
+                        <span className="inline-flex items-center gap-2">
+                          <i className="fa-solid fa-spinner animate-spin"></i>
+                          Creating
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2">
+                          <i className="fa-solid fa-plus"></i>New Code
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={copyCode}
+                      disabled={!meetingCode}
+                      className="w-full sm:w-auto px-3 py-2 rounded-lg border border-white/15 text-slate-200 hover:bg-slate-800 disabled:opacity-50 transition"
+                      aria-label="Copy meeting code"
+                    >
+                      <i
+                        className={`fa-solid ${
+                          copied ? "fa-check text-emerald-400" : "fa-copy"
+                        }`}
+                      ></i>
+                    </button>
+                  </div>
+                </div>
+
+                <p className="text-slate-400 text-xs sm:text-sm flex items-center gap-2">
+                  <i className="fa-solid fa-circle-info"></i>
+                  Share this code with participants to let them join.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <h2 className="text-white text-base sm:text-lg font-semibold flex items-center gap-2">
+                  <i className="fa-solid fa-right-to-bracket text-sky-400"></i>{" "}
+                  Join a meeting
+                </h2>
+
+                {/* Input group with inline clear button */}
+                <div className="relative">
+                  <label className="block text-slate-300 text-xs sm:text-sm mb-1">
+                    Meeting Code
+                  </label>
+
+                  <input
+                    type="text"
+                    placeholder="ABC1D2E3F"
+                    value={meetingCode || ""}
+                    onChange={(e) =>
+                      setMeetingCode(e.target.value.toUpperCase())
+                    }
+                    maxLength={9}
+                    className="w-full bg-slate-900/60 border border-white/10 rounded-xl px-4 pr-12 py-3
+                 text-white tracking-widest font-mono placeholder:text-slate-500
+                 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  />
+
+                  {/* Clear (X) button INSIDE the input, always aligned right */}
+                  {meetingCode ? (
+                    <button
+                      type="button"
+                      onClick={() => setMeetingCode("")}
+                      aria-label="Clear meeting code"
+                      className="absolute right-2 top-1/2 -translate-y-1/2
+                   h-9 w-9 rounded-lg flex items-center justify-center
+                   text-slate-300 hover:text-white hover:bg-slate-800 transition"
+                    >
+                      <i className="fa-solid fa-xmark"></i>
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            )}
+
+            {/* Connect button */}
+            <div className="pt-1">
+              <button
+                onClick={connectToMeeting}
+                disabled={
+                  isValidatingCode ||
+                  (meetingState === "join" &&
+                    (!meetingCode || meetingCode.length < 9))
+                }
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-violet-500 to-sky-500 hover:brightness-95 disabled:opacity-60 transition"
+              >
+                {isValidatingCode ? (
+                  <>
+                    <i className="fa-solid fa-spinner animate-spin"></i>
+                    Validating...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-plug"></i>
+                    Connect
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Bullets */}
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-slate-300 text-sm">
+              <li className="flex items-center gap-2">
+                <i className="fa-solid fa-shield-halved text-emerald-400"></i>{" "}
+                Secure rooms
+              </li>
+              <li className="flex items-center gap-2">
+                <i className="fa-solid fa-display text-sky-400"></i> Screen
+                sharing
+              </li>
+              <li className="flex items-center gap-2">
+                <i className="fa-solid fa-video text-purple-400"></i> HD video
+              </li>
+              <li className="flex items-center gap-2">
+                <i className="fa-solid fa-message text-pink-400"></i> Chat
+                built-in
+              </li>
+            </ul>
+          </div>
+
+          {/* Right column: video preview */}
+          <div>
+            <h3 className="text-white text-base sm:text-lg font-semibold mb-3 flex items-center gap-2">
+              <i className="fa-solid fa-camera-retro text-blue-400"></i> Preview
+            </h3>
+
+            <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-slate-900/60 shadow-xl">
+              <video
+                ref={localVideoRef}
+                autoPlay
+                muted
+                playsInline
+                className="w-full aspect-video bg-black object-cover"
+              ></video>
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_40%_at_60%_-10%,rgba(124,77,255,0.18),transparent_60%)]" />
+            </div>
+
+            <p className="text-slate-400 text-xs sm:text-sm mt-3 flex items-center gap-2">
+              <i className="fa-solid fa-circle-info"></i>
+              Camera/mic permissions are requested automatically on load.
+            </p>
+          </div>
+        </div>
       </div>
-      
-      <button
-        onClick={connectToMeeting}
-        disabled={isValidatingCode || (meetingState === "join" && !meetingCode)}
-        className="bg-blue-500 text-white px-4 py-2 rounded mt-2 disabled:bg-gray-400"
-      >
-        {isValidatingCode ? "Validating..." : "Connect"}
-      </button>
-    </>
+    </div>
   );
 }
