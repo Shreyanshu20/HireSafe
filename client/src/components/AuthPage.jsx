@@ -1,5 +1,6 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useState, useEffect } from "react";
 import { toast } from "react-toastify";
+import { useLocation } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext";
 
 function AuthPage() {
@@ -7,11 +8,21 @@ function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  const location = useLocation();
+
   const [formState, setFormState] = useState(
-    window.location.pathname.includes("register") ? "register" : "login"
+    location.pathname.includes("register") ? "register" : "login"
   );
 
   const { handleRegister, handleLogin } = useContext(AuthContext);
+
+  useEffect(() => {
+    if (location.pathname.includes("register")) {
+      setFormState("register");
+    } else if (location.pathname.includes("login")) {
+      setFormState("login");
+    }
+  }, [location.pathname]);
 
   const handleAuth = async (e) => {
     e.preventDefault();

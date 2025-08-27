@@ -19,8 +19,18 @@ function Navbar() {
   const getMenuItems = () => {
     const baseItems = [
       { label: "Home", icon: "fa-solid fa-house", path: "/", component: Link },
-      { label: "Meetings", icon: "fa-solid fa-video", path: "/meeting", component: Link },
-      { label: "Interviews", icon: "fa-solid fa-briefcase", path: "/interview", component: Link },
+      {
+        label: "Meetings",
+        icon: "fa-solid fa-video",
+        path: "/meeting",
+        component: Link,
+      },
+      {
+        label: "Interviews",
+        icon: "fa-solid fa-briefcase",
+        path: "/interview",
+        component: Link,
+      },
     ];
     if (isLoggedIn()) {
       baseItems.splice(1, 0, {
@@ -35,10 +45,28 @@ function Navbar() {
 
   const authItems = () =>
     isLoggedIn()
-      ? [{ label: "Logout", icon: "fa-solid fa-right-from-bracket", action: handleLogoutClick, className: "logout-btn" }]
+      ? [
+          {
+            label: "Logout",
+            icon: "fa-solid fa-right-from-bracket",
+            action: handleLogoutClick,
+            className: "logout-btn",
+          },
+        ]
       : [
-          { label: "Login", icon: "fa-solid fa-right-to-bracket", path: "/login", component: Link },
-          { label: "Register", icon: "fa-solid fa-user-plus", path: "/register", component: Link, className: "register-btn" },
+          {
+            label: "Login",
+            icon: "fa-solid fa-right-to-bracket",
+            path: "/login",
+            component: Link,
+          },
+          {
+            label: "Register",
+            icon: "fa-solid fa-user-plus",
+            path: "/register",
+            component: Link,
+            className: "register-btn",
+          },
         ];
 
   const menuItems = getMenuItems();
@@ -48,10 +76,20 @@ function Navbar() {
     <nav className="sticky top-0 z-50 w-full bg-slate-900/70 backdrop-blur supports-[backdrop-filter]:bg-slate-900/60 border-b border-white/10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          {/* Brand */}
+          {/* Brand - LOGO ONLY */}
           <div className="flex-shrink-0">
-            <Link to="/" className="flex items-center" onClick={() => setMobileOpen(false)}>
-              
+            <Link
+              to="/"
+              className="group transition-all duration-300 hover:scale-110"
+              onClick={() => setMobileOpen(false)}
+            >
+              <div className="relative">
+                <img
+                  src="/logo.png"
+                  alt="HireSafe Logo"
+                  className="h-50 w-50 object-contain"
+                />
+              </div>
             </Link>
           </div>
 
@@ -65,7 +103,9 @@ function Navbar() {
                     key={i}
                     to={item.path}
                     className={`px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 flex items-center space-x-2 ${
-                      isActive(item.path) ? "bg-blue-600 text-white" : "text-gray-200 hover:bg-slate-800 hover:text-white"
+                      isActive(item.path)
+                        ? "bg-blue-600 text-white"
+                        : "text-gray-200 hover:bg-slate-800 hover:text-white"
                     }`}
                   >
                     <i className={`${item.icon} text-base`}></i>
@@ -125,8 +165,18 @@ function Navbar() {
               aria-controls="mobile-menu"
             >
               <span className="sr-only">Open main menu</span>
-              <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+              <svg
+                className="h-6 w-6"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
               </svg>
             </button>
           </div>
@@ -134,7 +184,10 @@ function Navbar() {
       </div>
 
       {/* Mobile Menu */}
-      <div id="mobile-menu" className={`${mobileOpen ? "" : "hidden"} md:hidden`}>
+      <div
+        id="mobile-menu"
+        className={`${mobileOpen ? "" : "hidden"} md:hidden`}
+      >
         <div className="px-2 pt-2 pb-3 sm:px-3 bg-slate-900/95 border-t border-white/10">
           {menuItems.map((item, i) => {
             const Item = item.component;
@@ -144,7 +197,9 @@ function Navbar() {
                 to={item.path}
                 onClick={() => setMobileOpen(false)}
                 className={`block px-3 py-2 rounded-md text-base font-medium transition-colors duration-200 flex items-center space-x-3 ${
-                  isActive(item.path) ? "bg-blue-600 text-white" : "text-gray-200 hover:bg-slate-800 hover:text-white"
+                  isActive(item.path)
+                    ? "bg-blue-600 text-white"
+                    : "text-gray-200 hover:bg-slate-800 hover:text-white"
                 }`}
               >
                 <i className={`${item.icon} text-lg`}></i>

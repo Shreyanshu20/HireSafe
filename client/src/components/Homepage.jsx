@@ -28,16 +28,18 @@ export default function Homepage() {
                 <div className="mt-8 flex flex-wrap gap-4">
                   <Link
                     to="/interview"
-                    className="px-6 py-3 rounded-xl font-semibold text-white shadow-lg bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 transition-all duration-200 transform hover:scale-105"
+                    className="px-6 py-3 rounded-xl font-semibold text-white shadow-lg bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 transition-all duration-200 transform hover:scale-105 flex items-center space-x-2"
                   >
-                    🚀 Start Interview
+                    <i className="fa-solid fa-code"></i>
+                    <span>Start Interview</span>
                   </Link>
 
                   <Link
                     to="/meeting"
-                    className="px-6 py-3 rounded-xl font-semibold text-gray-200 border border-gray-500 hover:border-blue-400 hover:shadow-[0_0_0_6px_rgba(59,130,246,0.25)] transition-all duration-200"
+                    className="px-6 py-3 rounded-xl font-semibold text-gray-200 border border-gray-500 hover:border-blue-400 hover:shadow-[0_0_0_6px_rgba(59,130,246,0.25)] transition-all duration-200 flex items-center space-x-2"
                   >
-                    📹 Join Meeting
+                    <i className="fa-solid fa-video"></i>
+                    <span>Join Meeting</span>
                   </Link>
                 </div>
 
@@ -45,25 +47,25 @@ export default function Homepage() {
                 <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="flex items-center space-x-3">
                     <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-sm">
-                      ✓
+                      <i className="fa-solid fa-check text-white"></i>
                     </div>
                     <span className="text-gray-300">AI Anomaly Detection</span>
                   </div>
                   <div className="flex items-center space-x-3">
                     <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-sm">
-                      ✓
+                      <i className="fa-solid fa-check text-white"></i>
                     </div>
                     <span className="text-gray-300">Live Code Editor</span>
                   </div>
                   <div className="flex items-center space-x-3">
                     <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-sm">
-                      ✓
+                      <i className="fa-solid fa-check text-white"></i>
                     </div>
                     <span className="text-gray-300">HD Video Calls</span>
                   </div>
                   <div className="flex items-center space-x-3">
                     <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-sm">
-                      ✓
+                      <i className="fa-solid fa-check text-white"></i>
                     </div>
                     <span className="text-gray-300">Real-time Chat</span>
                   </div>
@@ -102,7 +104,7 @@ export default function Homepage() {
             {/* Feature 1 */}
             <div className="bg-gradient-to-br from-gray-800/40 to-gray-900/40 backdrop-blur-sm border border-gray-700/50 rounded-xl p-6 hover:border-blue-500/50 transition-all duration-200">
               <div className="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center text-2xl mb-4">
-                🤖
+                <i className="fa-solid fa-robot text-white"></i>
               </div>
               <h3 className="text-xl font-semibold text-white mb-3">
                 AI-Powered Detection
@@ -116,7 +118,7 @@ export default function Homepage() {
             {/* Feature 2 */}
             <div className="bg-gradient-to-br from-gray-800/40 to-gray-900/40 backdrop-blur-sm border border-gray-700/50 rounded-xl p-6 hover:border-purple-500/50 transition-all duration-200">
               <div className="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center text-2xl mb-4">
-                💻
+                <i className="fa-solid fa-laptop-code text-white"></i>
               </div>
               <h3 className="text-xl font-semibold text-white mb-3">
                 Live Coding Environment
@@ -130,7 +132,7 @@ export default function Homepage() {
             {/* Feature 3 */}
             <div className="bg-gradient-to-br from-gray-800/40 to-gray-900/40 backdrop-blur-sm border border-gray-700/50 rounded-xl p-6 hover:border-green-500/50 transition-all duration-200">
               <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center text-2xl mb-4">
-                🔒
+                <i className="fa-solid fa-shield-halved text-white"></i>
               </div>
               <h3 className="text-xl font-semibold text-white mb-3">
                 Secure & Private
@@ -157,7 +159,7 @@ export default function Homepage() {
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               <Link
-                to="/register"
+                to="/meeting"
                 className="px-8 py-4 rounded-xl font-semibold text-white shadow-lg bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 transition-all duration-200 transform hover:scale-105"
               >
                 Get Started Free
