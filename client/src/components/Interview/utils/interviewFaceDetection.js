@@ -3,7 +3,7 @@ import { sendMalpracticeDetection } from "./socketUtils";
 let isModelLoaded = false;
 let detectionInterval = null;
 let lastDetectionTime = 0;
-const DETECTION_COOLDOWN = 2000;
+const DETECTION_COOLDOWN = 1500;
 let useBasicDetection = false;
 let eyeClosedCount = 0;
 let lookingAwayCount = 0;
@@ -21,22 +21,35 @@ let detectionCount = 0;
 export const initializeFaceDetection = async () => {
   if (isModelLoaded) return true;
 
-  if (window.faceapi) {
-    try {
-      const success = await loadModelsWithRetry();
-      if (success) {
-        useBasicDetection = false;
-        isModelLoaded = true;
-        return true;
-      }
-    } catch (error) {
-      // Silent fail
-    }
+  // Check if face-api.js is loaded
+  if (!window.faceapi) {
+    console.warn("Face-api.js not loaded, using basic detection");
+    isModelLoaded = true;
+    useBasicDetection = true;
+    return true;
   }
-  
-  isModelLoaded = true;
-  useBasicDetection = true;
-  return true;
+
+  try {
+    const success = await loadModelsWithRetry();
+    if (success) {
+      useBasicDetection = false;
+      isModelLoaded = true;
+      console.log("✅ Face detection models loaded successfully");
+      return true;
+    } else {
+      console.warn(
+        "⚠️ Face detection models failed to load, using basic detection"
+      );
+      useBasicDetection = true;
+      isModelLoaded = true;
+      return true;
+    }
+  } catch (error) {
+    console.warn("⚠️ Face detection initialization error:", error);
+    useBasicDetection = true;
+    isModelLoaded = true;
+    return true;
+  }
 };
 
 const loadModelsWithRetry = async (retryCount = 3) => {
@@ -44,46 +57,65 @@ const loadModelsWithRetry = async (retryCount = 3) => {
     return false;
   }
 
+  const api = window.faceapi;
+
+  // Check if models are already loaded
+  if (
+    api.nets.tinyFaceDetector?.isLoaded &&
+    api.nets.faceLandmark68Net?.isLoaded &&
+    api.nets.faceExpressionNet?.isLoaded
+  ) {
+    console.log("✅ Models already loaded");
+    return true;
+  }
+
   for (let attempt = 1; attempt <= retryCount; attempt++) {
     try {
-      const api = window.faceapi;
-      
-      if (api.nets.tinyFaceDetector?.isLoaded && 
-          api.nets.faceLandmark68Net?.isLoaded && 
-          api.nets.faceExpressionNet?.isLoaded) {
-        return true;
-      }
+      console.log(
+        `🔄 Loading face detection models (attempt ${attempt}/${retryCount})`
+      );
 
       const modelPaths = [
         "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model",
         "/models",
-        "/public/models"
+        "./models",
+        "/public/models",
+        "./public/models",
       ];
-      
+
       for (const modelPath of modelPaths) {
         try {
+          console.log(`🔄 Trying model path: ${modelPath}`);
+
           await Promise.all([
             api.nets.tinyFaceDetector.loadFromUri(modelPath),
             api.nets.faceLandmark68Net.loadFromUri(modelPath),
             api.nets.faceExpressionNet.loadFromUri(modelPath),
           ]);
-          
+
+          console.log(`✅ Models loaded successfully from: ${modelPath}`);
           return true;
         } catch (pathError) {
+          console.warn(
+            `❌ Failed to load from ${modelPath}:`,
+            pathError.message
+          );
           continue;
         }
       }
-      
+
       if (attempt < retryCount) {
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        console.log(`⏳ Retrying in ${attempt} seconds...`);
+        await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
       }
     } catch (error) {
+      console.error(`❌ Attempt ${attempt} failed:`, error);
       if (attempt === retryCount) {
         return false;
       }
     }
   }
-  
+
   return false;
 };
 
@@ -96,7 +128,8 @@ export const startInterviewFaceDetection = ({
   onAnomalyDetected,
 }) => {
   if (!isModelLoaded) {
-    initializeFaceDetection().then(loaded => {
+    console.log("🔄 Initializing face detection...");
+    initializeFaceDetection().then((loaded) => {
       if (loaded) {
         startInterviewFaceDetection({
           videoElement,
@@ -112,6 +145,7 @@ export const startInterviewFaceDetection = ({
   }
 
   if (!videoElement) {
+    console.warn("⚠️ No video element provided");
     return;
   }
 
@@ -121,36 +155,48 @@ export const startInterviewFaceDetection = ({
 
   const startDetection = () => {
     if (videoElement.readyState >= 2 && videoElement.videoWidth > 0) {
-      detectionInterval = setInterval(async () => {
-        detectionCount++;
-        
-        try {
-          if (!useBasicDetection && window.faceapi) {
-            await performAdvancedFaceDetection({
-              videoElement,
-              canvasElement,
-              socketRef,
-              interviewCode,
-              isInterviewer,
-              onAnomalyDetected,
-            });
-          } else {
-            if (!isInterviewer) {
-              await performBasicDetection({
+      console.log(
+        `🚀 Starting ${
+          isInterviewer ? "interviewer" : "candidate"
+        } face detection`
+      );
+
+      detectionInterval = setInterval(
+        async () => {
+          detectionCount++;
+
+          try {
+            if (!useBasicDetection && window.faceapi) {
+              await performAdvancedFaceDetection({
                 videoElement,
+                canvasElement,
                 socketRef,
                 interviewCode,
+                isInterviewer,
                 onAnomalyDetected,
               });
+            } else {
+              if (!isInterviewer) {
+                await performBasicDetection({
+                  videoElement,
+                  socketRef,
+                  interviewCode,
+                  onAnomalyDetected,
+                });
+              }
+            }
+          } catch (error) {
+            console.error("❌ Detection error:", error);
+            if (!isInterviewer) {
+              useBasicDetection = true;
+              console.log("🔄 Switched to basic detection mode");
             }
           }
-        } catch (error) {
-          if (!isInterviewer) {
-            useBasicDetection = true;
-          }
-        }
-      }, isInterviewer ? 1000 : 1500);
+        },
+        isInterviewer ? 800 : 1000
+      );
     } else {
+      console.log("⏳ Waiting for video to be ready...");
       setTimeout(startDetection, 500);
     }
   };
@@ -162,8 +208,10 @@ export const stopInterviewFaceDetection = () => {
   if (detectionInterval) {
     clearInterval(detectionInterval);
     detectionInterval = null;
+    console.log("🛑 Face detection stopped");
   }
-  
+
+  // Reset all counters
   eyeClosedCount = 0;
   lookingAwayCount = 0;
   previousHeadPosition = null;
@@ -192,49 +240,77 @@ const performAdvancedFaceDetection = async ({
 
   try {
     const api = window.faceapi;
-    
+
     if (!api?.nets?.tinyFaceDetector?.isLoaded) {
+      console.warn("⚠️ Models not loaded, attempting to reload...");
       const loaded = await loadModelsWithRetry();
       if (!loaded) {
         useBasicDetection = true;
+        if (isInterviewer && canvasElement) {
+          showDetectionError(canvasElement, "Models failed to load");
+        }
         return;
       }
     }
-    
+
     const detections = await api
-      .detectAllFaces(videoElement, new api.TinyFaceDetectorOptions({ 
-        inputSize: 416,
-        scoreThreshold: 0.3
-      }))
+      .detectAllFaces(
+        videoElement,
+        new api.TinyFaceDetectorOptions({
+          inputSize: 416,
+          scoreThreshold: 0.25,
+        })
+      )
       .withFaceLandmarks()
       .withFaceExpressions();
 
     const anomalies = analyzeInterviewBehavior(detections, videoElement);
-    
+
     if (canvasElement && isInterviewer) {
       drawInterviewOverlay(canvasElement, detections, anomalies, videoElement);
     }
-    
+
     if (!isInterviewer && anomalies.length > 0) {
       anomalies.forEach((anomaly) => {
-        sendAnomalyIfCooldownPassed(anomaly, socketRef, interviewCode, onAnomalyDetected);
+        sendAnomalyIfCooldownPassed(
+          anomaly,
+          socketRef,
+          interviewCode,
+          onAnomalyDetected
+        );
       });
     }
-
   } catch (error) {
+    console.error("❌ Advanced detection error:", error);
+
     if (canvasElement && isInterviewer) {
-      const ctx = canvasElement.getContext("2d");
-      ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-      
-      ctx.fillStyle = "#ff0000";
-      ctx.font = "bold 16px Arial";
-      ctx.fillText("Detection Error", 10, 30);
-      ctx.fillText("Using Basic Detection Mode", 10, 50);
+      showDetectionError(canvasElement, error.message);
     }
-    
+
     if (!isInterviewer) {
       useBasicDetection = true;
+      console.log("🔄 Switched to basic detection due to error");
     }
+  }
+};
+
+const showDetectionError = (canvasElement, errorMessage) => {
+  const ctx = canvasElement.getContext("2d");
+  ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+  ctx.fillStyle = "rgba(255, 0, 0, 0.1)";
+  ctx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+
+  ctx.fillStyle = "#ff0000";
+  ctx.font = "bold 16px Arial";
+  ctx.fillText("⚠️ Detection Error", 10, 30);
+
+  ctx.font = "12px Arial";
+  ctx.fillText("Using Basic Detection Mode", 10, 50);
+
+  if (errorMessage) {
+    ctx.font = "10px Arial";
+    ctx.fillText(`Error: ${errorMessage.substring(0, 50)}...`, 10, 70);
   }
 };
 
@@ -242,13 +318,14 @@ const analyzeInterviewBehavior = (detections, videoElement) => {
   const anomalies = [];
   const currentTime = new Date().toISOString();
 
+  // Absence detection
   if (detections.length === 0) {
     offScreenCount++;
-    if (offScreenCount > 3) {
+    if (offScreenCount > 2) {
       anomalies.push({
         type: "candidate_absent",
         confidence: 0.95,
-        description: "Candidate not visible in camera for extended period",
+        description: "Candidate not visible in camera",
         timestamp: currentTime,
       });
     }
@@ -256,12 +333,13 @@ const analyzeInterviewBehavior = (detections, videoElement) => {
     offScreenCount = 0;
   }
 
+  // Multiple people detection
   if (detections.length > 1) {
     multiplePersonCount++;
     anomalies.push({
       type: "multiple_people",
       confidence: 0.98,
-      description: `${detections.length} people detected - possible unauthorized assistance`,
+      description: `${detections.length} people detected - unauthorized assistance`,
       timestamp: currentTime,
     });
   } else {
@@ -272,541 +350,194 @@ const analyzeInterviewBehavior = (detections, videoElement) => {
     const primaryFace = detections[0];
     const landmarks = primaryFace.landmarks;
     const expressions = primaryFace.expressions;
-    const ageGender = primaryFace;
 
     let eyeAspectRatio = 0.3;
     if (landmarks) {
-      const leftEye = landmarks.getLeftEye();
-      const rightEye = landmarks.getRightEye();
-      eyeAspectRatio = calculateEyeAspectRatio(leftEye, rightEye);
+      try {
+        const leftEye = landmarks.getLeftEye();
+        const rightEye = landmarks.getRightEye();
+        eyeAspectRatio = calculateEyeAspectRatio(leftEye, rightEye);
+      } catch (error) {
+        console.warn("⚠️ Eye aspect ratio calculation failed:", error);
+      }
     }
 
     if (landmarks) {
-      const nose = landmarks.getNose();
-      const faceBox = primaryFace.detection.box;
-      const headPosition = calculateHeadPose(nose, faceBox);
-      
-      if (isLookingAway(headPosition, faceBox)) {
-        lookingAwayCount++;
-        if (lookingAwayCount > 4) {
-          anomalies.push({
-            type: "looking_away_extended",
-            confidence: 0.88,
-            description: `Candidate looking away from screen for ${lookingAwayCount * 1.5}s - possible external help`,
-            timestamp: currentTime,
-          });
-        }
-      } else {
-        lookingAwayCount = 0;
-      }
+      try {
+        const nose = landmarks.getNose();
+        const faceBox = primaryFace.detection.box;
+        const headPosition = calculateHeadPose(nose, faceBox);
 
-      if (eyeAspectRatio < 0.25) {
-        eyeClosedCount++;
-        if (eyeClosedCount > 5) {
-          anomalies.push({
-            type: "eyes_closed_extended",
-            confidence: 0.85,
-            description: `Eyes closed for ${eyeClosedCount * 1.5}s - candidate may be sleeping or distracted`,
-            timestamp: currentTime,
-          });
-        }
-      } else {
-        eyeClosedCount = 0;
-      }
-
-      if (previousHeadPosition) {
-        const movementMagnitude = Math.sqrt(
-          Math.pow(headPosition.x - previousHeadPosition.x, 2) + 
-          Math.pow(headPosition.y - previousHeadPosition.y, 2)
-        );
-        
-        if (movementMagnitude > 50) {
-          suspiciousMovementCount++;
-          if (suspiciousMovementCount > 3) {
+        // Looking away detection
+        if (isLookingAway(headPosition, faceBox)) {
+          lookingAwayCount++;
+          if (lookingAwayCount > 2) {
             anomalies.push({
-              type: "suspicious_head_movement",
-              confidence: 0.75,
-              description: "Frequent head movements detected - possible use of external devices",
+              type: "looking_away_extended",
+              confidence: 0.88,
+              description: `Candidate looking away - possible external assistance`,
               timestamp: currentTime,
             });
-            suspiciousMovementCount = 0;
+          }
+        } else {
+          lookingAwayCount = 0;
+        }
+
+        // Eye closure detection
+        if (eyeAspectRatio < 0.22) {
+          eyeClosedCount++;
+          if (eyeClosedCount > 3) {
+            anomalies.push({
+              type: "eyes_closed_extended",
+              confidence: 0.85,
+              description: `Eyes closed for extended period - possible distraction`,
+              timestamp: currentTime,
+            });
+          }
+        } else {
+          eyeClosedCount = 0;
+        }
+
+        // Head movement detection
+        if (previousHeadPosition) {
+          const movementMagnitude = Math.sqrt(
+            Math.pow(headPosition.x - previousHeadPosition.x, 2) +
+              Math.pow(headPosition.y - previousHeadPosition.y, 2)
+          );
+
+          if (movementMagnitude > 35) {
+            suspiciousMovementCount++;
+            if (suspiciousMovementCount > 2) {
+              anomalies.push({
+                type: "suspicious_head_movement",
+                confidence: 0.75,
+                description:
+                  "Frequent head movements - possible external device use",
+                timestamp: currentTime,
+              });
+              suspiciousMovementCount = 0;
+            }
           }
         }
+        previousHeadPosition = headPosition;
+      } catch (error) {
+        console.warn("⚠️ Landmark analysis failed:", error);
       }
-      previousHeadPosition = headPosition;
     }
 
+    // Expression analysis
     if (expressions) {
-      if (expressions.fearful > 0.7 || expressions.surprised > 0.8) {
-        anomalies.push({
-          type: "high_stress_detected",
-          confidence: 0.65,
-          description: `High stress/surprise expression detected (${Math.max(expressions.fearful, expressions.surprised).toFixed(2)})`,
-          timestamp: currentTime,
-        });
-      }
-
-      if (expressions.neutral > 0.9 && eyeAspectRatio > 0.4) {
-        phoneDetectionCount++;
-        if (phoneDetectionCount > 8) {
+      try {
+        if (expressions.fearful > 0.6 || expressions.surprised > 0.7) {
           anomalies.push({
-            type: "reading_behavior",
+            type: "high_stress_detected",
             confidence: 0.7,
-            description: "Sustained reading-like behavior detected - possible use of notes/phone",
+            description: `High stress/surprise detected - unusual behavior`,
             timestamp: currentTime,
           });
-          phoneDetectionCount = 0;
         }
+
+        // Reading behavior detection (focused concentration patterns)
+        if (expressions.neutral > 0.85 && eyeAspectRatio > 0.35) {
+          phoneDetectionCount++;
+          if (phoneDetectionCount > 5) {
+            anomalies.push({
+              type: "reading_behavior",
+              confidence: 0.75,
+              description:
+                "Sustained focused reading - possible use of notes/device",
+              timestamp: currentTime,
+            });
+            phoneDetectionCount = 0;
+          }
+        }
+      } catch (error) {
+        console.warn("⚠️ Expression analysis failed:", error);
       }
     }
 
-    const faceArea = primaryFace.detection.box.width * primaryFace.detection.box.height;
-    const videoArea = videoElement.videoWidth * videoElement.videoHeight;
-    const faceRatio = faceArea / videoArea;
-    
-    if (faceRatio < 0.02) {
-      anomalies.push({
-        type: "candidate_too_far",
-        confidence: 0.8,
-        description: `Candidate too far from camera (${(faceRatio * 100).toFixed(1)}% of frame)`,
-        timestamp: currentTime,
-      });
-    } else if (faceRatio > 0.4) {
-      anomalies.push({
-        type: "candidate_too_close",
-        confidence: 0.75,
-        description: `Candidate unusually close to camera (${(faceRatio * 100).toFixed(1)}% of frame) - possible screen reading`,
-        timestamp: currentTime,
-      });
-    }
+    // Distance detection
+    try {
+      const faceArea =
+        primaryFace.detection.box.width * primaryFace.detection.box.height;
+      const videoArea = videoElement.videoWidth * videoElement.videoHeight;
+      const faceRatio = faceArea / videoArea;
 
-    if (primaryFace.detection.score < 0.5) {
-      anomalies.push({
-        type: "poor_video_quality",
-        confidence: 0.6,
-        description: `Poor detection confidence (${(primaryFace.detection.score * 100).toFixed(1)}%) - improve lighting`,
-        timestamp: currentTime,
-      });
-    }
-
-    if (ageGender && ageGender.age) {
-      if (ageGender.age < 16 || ageGender.age > 70) {
+      if (faceRatio < 0.025) {
         anomalies.push({
-          type: "age_verification_concern",
-          confidence: 0.6,
-          description: `Detected age: ${ageGender.age.toFixed(0)} years - verify candidate identity`,
+          type: "candidate_too_far",
+          confidence: 0.85,
+          description: `Candidate too far from camera - verification difficult`,
+          timestamp: currentTime,
+        });
+      } else if (faceRatio > 0.35) {
+        anomalies.push({
+          type: "candidate_too_close",
+          confidence: 0.8,
+          description: `Candidate unusually close - possible screen reading`,
           timestamp: currentTime,
         });
       }
+    } catch (error) {
+      console.warn("⚠️ Distance calculation failed:", error);
+    }
+
+    // Quality detection
+    if (primaryFace.detection.score < 0.6) {
+      anomalies.push({
+        type: "poor_video_quality",
+        confidence: 0.65,
+        description: `Poor detection quality - improve lighting/camera`,
+        timestamp: currentTime,
+      });
     }
   }
 
   return anomalies;
 };
 
-const isLookingAway = (headPosition, faceBox) => {
-  const horizontalThreshold = faceBox.width * 0.15;
-  const verticalThreshold = faceBox.height * 0.12;
-  
-  return Math.abs(headPosition.x) > horizontalThreshold || 
-         Math.abs(headPosition.y) > verticalThreshold;
-};
-
-const drawExpressionPanel = (ctx, expressions, x, y) => {
-  const topExpressions = Object.entries(expressions)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3);
-  
-  ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
-  ctx.fillRect(x, y, 200, 80);
-  
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 12px Arial";
-  ctx.fillText("Expressions:", x + 5, y + 15);
-  
-  topExpressions.forEach((expr, index) => {
-    const percentage = (expr[1] * 100).toFixed(1);
-    const color = expr[1] > 0.6 ? "#ff4444" : expr[1] > 0.3 ? "#ffaa44" : "#ffffff";
-    ctx.fillStyle = color;
-    ctx.font = "11px Arial";
-    ctx.fillText(`${expr[0]}: ${percentage}%`, x + 5, y + 35 + index * 15);
-  });
-};
-
-const drawAnomalyOverlay = (ctx, anomalies, canvasWidth, canvasHeight) => {
-  if (anomalies.length === 0) return;
-  
-  const alertWidth = 300;
-  const alertX = canvasWidth - alertWidth - 10;
-  let alertY = 50;
-  
-  anomalies.slice(0, 3).forEach((anomaly, index) => {
-    const currentY = alertY + index * 45;
-    
-    ctx.fillStyle = "rgba(255, 0, 0, 0.9)";
-    ctx.fillRect(alertX, currentY, alertWidth, 40);
-    
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 12px Arial";
-    ctx.fillText(`⚠️ ${anomaly.type.replace('_', ' ').toUpperCase()}`, alertX + 5, currentY + 15);
-    
-    ctx.font = "10px Arial";
-    ctx.fillText(anomaly.description.substring(0, 40) + "...", alertX + 5, currentY + 30);
-    
-    ctx.fillStyle = "#ffff00";
-    ctx.font = "bold 11px Arial";
-    ctx.fillText(`${(anomaly.confidence * 100).toFixed(0)}%`, alertX + alertWidth - 35, currentY + 20);
-  });
-};
-
-const drawInterviewStatus = (ctx, detections, anomalies) => {
-  const statusY = 50;
-  
-  let status = "✅ NORMAL";
-  let statusColor = "#00ff00";
-  
-  const criticalAnomalies = anomalies.filter(a => 
-    ["multiple_people", "candidate_absent", "looking_away_extended"].includes(a.type)
-  );
-  
-  if (criticalAnomalies.length > 0) {
-    status = "🚨 CRITICAL";
-    statusColor = "#ff0000";
-  } else if (anomalies.length > 0) {
-    status = "⚠️ WARNING";
-    statusColor = "#ff6600";
-  }
-  
-  ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-  ctx.fillRect(10, statusY, 200, 30);
-  
-  ctx.fillStyle = statusColor;
-  ctx.font = "bold 14px Arial";
-  ctx.fillText(`Status: ${status}`, 15, statusY + 20);
-};
-
-const drawInterviewOverlay = (canvas, detections, anomalies, videoElement) => {
-  if (!canvas) return;
-  
-  const ctx = canvas.getContext("2d");
-  
-  canvas.width = videoElement.videoWidth || 640;
-  canvas.height = videoElement.videoHeight || 480;
-  
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  ctx.fillStyle = "#00ff00";
-  ctx.font = "bold 14px Arial";
-  ctx.fillText(`AI Analysis Active - Cycle #${detectionCount}`, 10, 25);
-  
-  if (detections.length === 0) {
-    ctx.fillStyle = "rgba(255, 0, 0, 0.3)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    ctx.fillStyle = "#ff0000";
-    ctx.font = "bold 24px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText("❌ NO CANDIDATE DETECTED", canvas.width / 2, canvas.height / 2);
-    ctx.textAlign = "left";
-    return;
-  }
-
-  detections.forEach((detection, index) => {
-    try {
-      const { x, y, width, height } = detection.detection.box;
-      const landmarks = detection.landmarks;
-      const expressions = detection.expressions;
-      const confidence = detection.detection.score;
-      
-      let boxColor = "#00ff00";
-      if (anomalies.some(a => ["multiple_people", "candidate_absent"].includes(a.type))) {
-        boxColor = "#ff0000";
-      } else if (anomalies.some(a => ["looking_away_extended", "suspicious_head_movement"].includes(a.type))) {
-        boxColor = "#ff6600";
-      } else if (confidence < 0.7) {
-        boxColor = "#ffff00";
-      }
-
-      ctx.strokeStyle = boxColor;
-      ctx.lineWidth = 3;
-      ctx.strokeRect(x, y, width, height);
-      
-      ctx.fillStyle = boxColor;
-      ctx.font = "bold 16px Arial";
-      const confidenceText = `${(confidence * 100).toFixed(0)}%`;
-      ctx.fillText(confidenceText, x + width - 50, y - 5);
-      
-      if (detections.length > 1) {
-        ctx.fillStyle = "#ff0000";
-        ctx.font = "bold 18px Arial";
-        ctx.fillText(`Person ${index + 1}`, x, y - 25);
-      }
-
-      if (landmarks) {
-        drawDetailedFacialLandmarks(ctx, landmarks, boxColor);
-        drawEyeTracking(ctx, landmarks, anomalies);
-        drawNoseDirection(ctx, landmarks, anomalies);
-      }
-
-      if (expressions) {
-        drawExpressionPanel(ctx, expressions, x, y + height + 10);
-      }
-
-      if (detection.age !== undefined) {
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "12px Arial";
-        ctx.fillRect(x, y + height - 40, 100, 35);
-        ctx.fillStyle = "#000000";
-        ctx.fillText(`Age: ${detection.age.toFixed(0)}`, x + 5, y + height - 25);
-        ctx.fillText(`${detection.gender}`, x + 5, y + height - 10);
-      }
-    } catch (error) {
-      ctx.fillStyle = "#ff0000";
-      ctx.font = "12px Arial";
-      ctx.fillText(`Detection Error`, 10, 50 + index * 20);
-    }
-  });
-
-  drawAnomalyOverlay(ctx, anomalies, canvas.width, canvas.height);
-  drawInterviewStatus(ctx, detections, anomalies);
-};
-
-const drawDetailedFacialLandmarks = (ctx, landmarks, color) => {
-  const drawPoints = (points, pointColor = color, size = 2) => {
-    ctx.fillStyle = pointColor;
-    points.forEach(point => {
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, size, 0, 2 * Math.PI);
-      ctx.fill();
-    });
-  };
-
-  try {
-    drawPoints(landmarks.getJawOutline(), "#00ffff", 2);
-    drawPoints(landmarks.getLeftEyeBrow(), "#ff00ff", 2);
-    drawPoints(landmarks.getRightEyeBrow(), "#ff00ff", 2);
-    drawPoints(landmarks.getLeftEye(), "#00ff00", 3);
-    drawPoints(landmarks.getRightEye(), "#00ff00", 3);
-    drawPoints(landmarks.getNose(), "#ffff00", 2);
-    drawPoints(landmarks.getMouth(), "#ff0000", 2);
-  } catch (error) {
-    if (landmarks.positions) {
-      drawPoints(landmarks.positions, color, 1);
-    } else if (landmarks._positions) {
-      drawPoints(landmarks._positions, color, 1);
-    } else {
-      drawManualLandmarks(ctx, landmarks, color);
-    }
-  }
-};
-
-const drawManualLandmarks = (ctx, landmarks, color) => {
-  const points = landmarks.positions || landmarks._positions || landmarks;
-  
-  if (!points || !Array.isArray(points)) {
-    return;
-  }
-
-  const drawPoints = (indices, pointColor, size = 2) => {
-    ctx.fillStyle = pointColor;
-    indices.forEach(index => {
-      if (points[index]) {
-        const point = points[index];
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, size, 0, 2 * Math.PI);
-        ctx.fill();
-      }
-    });
-  };
-
-  const jawOutline = Array.from({length: 17}, (_, i) => i);
-  const leftEyebrow = Array.from({length: 5}, (_, i) => i + 17);
-  const rightEyebrow = Array.from({length: 5}, (_, i) => i + 22);
-  const nose = Array.from({length: 9}, (_, i) => i + 27);
-  const leftEye = Array.from({length: 6}, (_, i) => i + 36);
-  const rightEye = Array.from({length: 6}, (_, i) => i + 42);
-  const mouth = Array.from({length: 20}, (_, i) => i + 48);
-
-  drawPoints(jawOutline, "#00ffff", 2);
-  drawPoints(leftEyebrow, "#ff00ff", 2);
-  drawPoints(rightEyebrow, "#ff00ff", 2);
-  drawPoints(leftEye, "#00ff00", 3);
-  drawPoints(rightEye, "#00ff00", 3);
-  drawPoints(nose, "#ffff00", 2);
-  drawPoints(mouth, "#ff0000", 2);
-};
-
-const drawEyeTracking = (ctx, landmarks, anomalies) => {
-  try {
-    const leftEye = landmarks.getLeftEye();
-    const rightEye = landmarks.getRightEye();
-    
-    const eyeColor = anomalies.some(a => a.type.includes("eyes_closed")) ? "#ff0000" : "#00ff00";
-    
-    ctx.strokeStyle = eyeColor;
-    ctx.lineWidth = 2;
-    
-    [leftEye, rightEye].forEach(eye => {
-      if (eye && eye.length > 0) {
-        ctx.beginPath();
-        eye.forEach((point, index) => {
-          if (index === 0) ctx.moveTo(point.x, point.y);
-          else ctx.lineTo(point.x, point.y);
-        });
-        ctx.closePath();
-        ctx.stroke();
-      }
-    });
-    
-    const leftCenter = getPolygonCenter(leftEye);
-    const rightCenter = getPolygonCenter(rightEye);
-    
-    ctx.fillStyle = eyeColor;
-    ctx.beginPath();
-    ctx.arc(leftCenter.x, leftCenter.y, 4, 0, 2 * Math.PI);
-    ctx.fill();
-    
-    ctx.beginPath();
-    ctx.arc(rightCenter.x, rightCenter.y, 4, 0, 2 * Math.PI);
-    ctx.fill();
-  } catch (error) {
-    drawFallbackEyes(ctx, landmarks, anomalies);
-  }
-};
-
-const drawFallbackEyes = (ctx, landmarks, anomalies) => {
-  const points = landmarks.positions || landmarks._positions || landmarks;
-  if (!points) return;
-
-  const eyeColor = anomalies.some(a => a.type.includes("eyes_closed")) ? "#ff0000" : "#00ff00";
-  
-  const leftEyePoints = points.slice(36, 42);
-  const rightEyePoints = points.slice(42, 48);
-  
-  [leftEyePoints, rightEyePoints].forEach(eyePoints => {
-    if (eyePoints && eyePoints.length > 0) {
-      ctx.strokeStyle = eyeColor;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      eyePoints.forEach((point, index) => {
-        if (index === 0) ctx.moveTo(point.x, point.y);
-        else ctx.lineTo(point.x, point.y);
-      });
-      ctx.closePath();
-      ctx.stroke();
-      
-      const center = getPolygonCenter(eyePoints);
-      ctx.fillStyle = eyeColor;
-      ctx.beginPath();
-      ctx.arc(center.x, center.y, 3, 0, 2 * Math.PI);
-      ctx.fill();
-    }
-  });
-};
-
-const drawNoseDirection = (ctx, landmarks, anomalies) => {
-  try {
-    const nose = landmarks.getNose();
-    if (!nose || nose.length < 4) {
-      throw new Error("Invalid nose landmarks");
-    }
-    
-    const noseTip = nose[3];
-    const noseBase = nose[6] || nose[0];
-    
-    const directionColor = anomalies.some(a => a.type.includes("looking_away")) ? "#ff0000" : "#00ff00";
-    
-    ctx.strokeStyle = directionColor;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(noseBase.x, noseBase.y);
-    ctx.lineTo(noseTip.x, noseTip.y);
-    ctx.stroke();
-    
-    const angle = Math.atan2(noseTip.y - noseBase.y, noseTip.x - noseBase.x);
-    const arrowLength = 8;
-    
-    ctx.beginPath();
-    ctx.moveTo(noseTip.x, noseTip.y);
-    ctx.lineTo(
-      noseTip.x - arrowLength * Math.cos(angle - Math.PI / 6),
-      noseTip.y - arrowLength * Math.sin(angle - Math.PI / 6)
-    );
-    ctx.moveTo(noseTip.x, noseTip.y);
-    ctx.lineTo(
-      noseTip.x - arrowLength * Math.cos(angle + Math.PI / 6),
-      noseTip.y - arrowLength * Math.sin(angle + Math.PI / 6)
-    );
-    ctx.stroke();
-  } catch (error) {
-    drawFallbackNose(ctx, landmarks, anomalies);
-  }
-};
-
-const drawFallbackNose = (ctx, landmarks, anomalies) => {
-  const points = landmarks.positions || landmarks._positions || landmarks;
-  if (!points) return;
-
-  const directionColor = anomalies.some(a => a.type.includes("looking_away")) ? "#ff0000" : "#00ff00";
-  
-  const noseTip = points[30];
-  const noseBase = points[27];
-  
-  if (noseTip && noseBase) {
-    ctx.strokeStyle = directionColor;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(noseBase.x, noseBase.y);
-    ctx.lineTo(noseTip.x, noseTip.y);
-    ctx.stroke();
-    
-    ctx.fillStyle = directionColor;
-    ctx.beginPath();
-    ctx.arc(noseTip.x, noseTip.y, 3, 0, 2 * Math.PI);
-    ctx.fill();
-  }
-};
-
-const getPolygonCenter = (points) => {
-  if (!points || points.length === 0) {
-    return { x: 0, y: 0 };
-  }
-  
-  const x = points.reduce((sum, p) => sum + (p.x || 0), 0) / points.length;
-  const y = points.reduce((sum, p) => sum + (p.y || 0), 0) / points.length;
-  return { x, y };
-};
-
+// Utility functions with error handling
 const calculateEyeAspectRatio = (leftEye, rightEye) => {
   try {
     if (!leftEye || !rightEye || leftEye.length < 6 || rightEye.length < 6) {
       return 0.3;
     }
 
-    const leftEyeHeight = Math.sqrt(
-      Math.pow(leftEye[1].x - leftEye[5].x, 2) + Math.pow(leftEye[1].y - leftEye[5].y, 2)
-    ) + Math.sqrt(
-      Math.pow(leftEye[2].x - leftEye[4].x, 2) + Math.pow(leftEye[2].y - leftEye[4].y, 2)
-    );
-    
-    const rightEyeHeight = Math.sqrt(
-      Math.pow(rightEye[1].x - rightEye[5].x, 2) + Math.pow(rightEye[1].y - rightEye[5].y, 2)
-    ) + Math.sqrt(
-      Math.pow(rightEye[2].x - rightEye[4].x, 2) + Math.pow(rightEye[2].y - rightEye[4].y, 2)
-    );
+    const leftEyeHeight =
+      Math.sqrt(
+        Math.pow(leftEye[1].x - leftEye[5].x, 2) +
+          Math.pow(leftEye[1].y - leftEye[5].y, 2)
+      ) +
+      Math.sqrt(
+        Math.pow(leftEye[2].x - leftEye[4].x, 2) +
+          Math.pow(leftEye[2].y - leftEye[4].y, 2)
+      );
+
+    const rightEyeHeight =
+      Math.sqrt(
+        Math.pow(rightEye[1].x - rightEye[5].x, 2) +
+          Math.pow(rightEye[1].y - rightEye[5].y, 2)
+      ) +
+      Math.sqrt(
+        Math.pow(rightEye[2].x - rightEye[4].x, 2) +
+          Math.pow(rightEye[2].y - rightEye[4].y, 2)
+      );
 
     const leftEyeWidth = Math.sqrt(
-      Math.pow(leftEye[0].x - leftEye[3].x, 2) + Math.pow(leftEye[0].y - leftEye[3].y, 2)
+      Math.pow(leftEye[0].x - leftEye[3].x, 2) +
+        Math.pow(leftEye[0].y - leftEye[3].y, 2)
     );
     const rightEyeWidth = Math.sqrt(
-      Math.pow(rightEye[0].x - rightEye[3].x, 2) + Math.pow(rightEye[0].y - rightEye[3].y, 2)
+      Math.pow(rightEye[0].x - rightEye[3].x, 2) +
+        Math.pow(rightEye[0].y - rightEye[3].y, 2)
     );
 
     const leftEAR = leftEyeHeight / (2 * leftEyeWidth);
     const rightEAR = rightEyeHeight / (2 * rightEyeWidth);
-    
+
     return (leftEAR + rightEAR) / 2;
   } catch (error) {
+    console.warn("⚠️ Eye aspect ratio calculation error:", error);
     return 0.3;
   }
 };
@@ -820,20 +551,263 @@ const calculateHeadPose = (nose, faceBox) => {
     const noseTip = nose[3];
     const faceCenter = {
       x: faceBox.x + faceBox.width / 2,
-      y: faceBox.y + faceBox.height / 2
+      y: faceBox.y + faceBox.height / 2,
     };
-    
+
     return {
       x: noseTip.x - faceCenter.x,
       y: noseTip.y - faceCenter.y,
       faceWidth: faceBox.width,
-      faceHeight: faceBox.height
+      faceHeight: faceBox.height,
     };
   } catch (error) {
+    console.warn("⚠️ Head pose calculation error:", error);
     return { x: 0, y: 0, faceWidth: 100, faceHeight: 100 };
   }
 };
 
+const isLookingAway = (headPosition, faceBox) => {
+  try {
+    const horizontalThreshold = faceBox.width * 0.12;
+    const verticalThreshold = faceBox.height * 0.1;
+
+    return (
+      Math.abs(headPosition.x) > horizontalThreshold ||
+      Math.abs(headPosition.y) > verticalThreshold
+    );
+  } catch (error) {
+    console.warn("⚠️ Looking away calculation error:", error);
+    return false;
+  }
+};
+
+const getPolygonCenter = (points) => {
+  try {
+    if (!points || points.length === 0) {
+      return { x: 0, y: 0 };
+    }
+
+    const x = points.reduce((sum, p) => sum + (p.x || 0), 0) / points.length;
+    const y = points.reduce((sum, p) => sum + (p.y || 0), 0) / points.length;
+    return { x, y };
+  } catch (error) {
+    console.warn("⚠️ Polygon center calculation error:", error);
+    return { x: 0, y: 0 };
+  }
+};
+
+// SIMPLE: Clean overlay without all the bullshit
+const drawInterviewOverlay = (canvas, detections, anomalies, videoElement) => {
+  if (!canvas) return;
+
+  try {
+    const ctx = canvas.getContext("2d");
+    canvas.width = videoElement.videoWidth || 640;
+    canvas.height = videoElement.videoHeight || 480;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Simple status in top corner
+    drawSimpleStatus(ctx, detections, anomalies);
+
+    if (detections.length === 0) {
+      drawSimpleNoFace(ctx, canvas.width, canvas.height);
+      return;
+    }
+
+    detections.forEach((detection, index) => {
+      const { x, y, width, height } = detection.detection.box;
+      const landmarks = detection.landmarks;
+      const confidence = detection.detection.score;
+
+      // Simple face box
+      drawSimpleFaceBox(ctx, x, y, width, height, confidence, anomalies, detections.length > 1 ? index + 1 : null);
+
+      // Draw face landmarks - eyes and jaw
+      if (landmarks) {
+        drawFaceLandmarks(ctx, landmarks, anomalies);
+      }
+    });
+
+    // Simple anomaly alerts
+    if (anomalies.length > 0) {
+      drawSimpleAnomalies(ctx, anomalies, canvas.width);
+    }
+
+  } catch (error) {
+    console.error("❌ Drawing error:", error);
+  }
+};
+
+// Simple status indicator - FIXED
+const drawSimpleStatus = (ctx, detections, anomalies) => {
+  const criticalAnomalies = anomalies.filter(a => 
+    ["multiple_people", "candidate_absent", "no_movement_detected"].includes(a.type)
+  );
+
+  let status = "Status: Normal";
+  let color = "#00ff00";
+
+  if (criticalAnomalies.length > 0 || detections.length > 1) {
+    status = "Status: Anomaly";
+    color = "#ff0000";
+  }
+
+  // Status background
+  ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+  ctx.fillRect(10, 10, 160, 35);
+
+  // Status border
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(10, 10, 160, 35);
+
+  // Status text
+  ctx.fillStyle = color;
+  ctx.font = "bold 14px Arial";
+  ctx.fillText(status, 20, 32);
+};
+
+// Simple face box
+const drawSimpleFaceBox = (ctx, x, y, width, height, confidence, anomalies, personNumber) => {
+  // Box color based on issues
+  let color = "#00ff00"; // Green = good
+  
+  if (confidence < 0.6) {
+    color = "#ffff00"; // Yellow = poor quality
+  }
+  
+  const criticalAnomalies = anomalies.filter(a => 
+    ["multiple_people", "candidate_absent", "looking_away_extended", "eyes_closed_extended"].includes(a.type)
+  );
+  
+  if (criticalAnomalies.length > 0) {
+    color = "#ff0000"; // Red = problems
+  }
+
+  // Simple rectangle
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(x, y, width, height);
+
+  // Confidence in corner
+  ctx.fillStyle = color;
+  ctx.font = "bold 14px Arial";
+  ctx.fillText(`${(confidence * 100).toFixed(0)}%`, x + width - 50, y - 5);
+
+  // Person number if multiple people
+  if (personNumber) {
+    ctx.fillStyle = "#ff0000";
+    ctx.font = "bold 18px Arial";
+    ctx.fillText(`#${personNumber}`, x, y - 10);
+  }
+};
+
+// FIXED: Face landmarks with dots and jaw line
+const drawFaceLandmarks = (ctx, landmarks, anomalies) => {
+  try {
+    const leftEye = landmarks.getLeftEye();
+    const rightEye = landmarks.getRightEye();
+    const jawOutline = landmarks.getJawOutline();
+
+    const eyesClosed = anomalies.some(a => a.type.includes("eyes_closed"));
+    const eyeColor = eyesClosed ? "#ff0000" : "#00ff00";
+
+    // Draw jaw line
+    if (jawOutline && jawOutline.length > 0) {
+      ctx.strokeStyle = "#00ffff"; // Cyan for jaw
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      jawOutline.forEach((point, index) => {
+        if (index === 0) {
+          ctx.moveTo(point.x, point.y);
+        } else {
+          ctx.lineTo(point.x, point.y);
+        }
+      });
+      ctx.stroke();
+
+      // Draw jaw dots
+      ctx.fillStyle = "#00ffff";
+      jawOutline.forEach(point => {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 2, 0, 2 * Math.PI);
+        ctx.fill();
+      });
+    }
+
+    // Draw left eye dots
+    if (leftEye && leftEye.length > 0) {
+      ctx.fillStyle = eyeColor;
+      leftEye.forEach(point => {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 3, 0, 2 * Math.PI);
+        ctx.fill();
+      });
+    }
+
+    // Draw right eye dots
+    if (rightEye && rightEye.length > 0) {
+      ctx.fillStyle = eyeColor;
+      rightEye.forEach(point => {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 3, 0, 2 * Math.PI);
+        ctx.fill();
+      });
+    }
+
+  } catch (error) {
+    console.warn("⚠️ Landmark drawing failed:", error);
+  }
+};
+
+// Simple no face message
+const drawSimpleNoFace = (ctx, canvasWidth, canvasHeight) => {
+  ctx.fillStyle = "rgba(255, 0, 0, 0.2)";
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+  ctx.fillStyle = "#ff0000";
+  ctx.font = "bold 24px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("NO FACE DETECTED", canvasWidth / 2, canvasHeight / 2);
+  ctx.textAlign = "left";
+};
+
+// Simple anomaly alerts
+const drawSimpleAnomalies = (ctx, anomalies, canvasWidth) => {
+  const importantAnomalies = anomalies.filter(a => 
+    ["multiple_people", "candidate_absent", "looking_away_extended", "eyes_closed_extended"].includes(a.type)
+  ).slice(0, 2);
+
+  importantAnomalies.forEach((anomaly, index) => {
+    const alertY = 70 + (index * 50);
+    const alertX = canvasWidth - 300;
+
+    // Alert background
+    ctx.fillStyle = "rgba(255, 0, 0, 0.8)";
+    ctx.fillRect(alertX, alertY, 290, 40);
+
+    // Alert border
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(alertX, alertY, 290, 40);
+
+    // Alert text
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 12px Arial";
+    ctx.fillText(`⚠ ${anomaly.type.replace("_", " ").toUpperCase()}`, alertX + 10, alertY + 15);
+    
+    ctx.font = "10px Arial";
+    const desc = anomaly.description.substring(0, 35) + "...";
+    ctx.fillText(desc, alertX + 10, alertY + 30);
+
+    // Confidence
+    ctx.fillStyle = "#ffff00";
+    ctx.font = "bold 11px Arial";
+    ctx.fillText(`${(anomaly.confidence * 100).toFixed(0)}%`, alertX + 250, alertY + 25);
+  });
+};
+
+// Basic detection functions (unchanged)
 const performBasicDetection = async ({
   videoElement,
   socketRef,
@@ -843,23 +817,23 @@ const performBasicDetection = async ({
   if (!videoElement || videoElement.paused || videoElement.ended) return;
 
   try {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
     canvas.width = Math.min(videoElement.videoWidth || 320, 320);
     canvas.height = Math.min(videoElement.videoHeight || 240, 240);
-    
+
     ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    
+
     if (previousFrame) {
       const similarity = calculateFrameSimilarity(previousFrame, imageData);
-      if (similarity > 0.97) {
+      if (similarity > 0.95) {
         staticFrameCount++;
-        if (staticFrameCount > 4) {
+        if (staticFrameCount > 3) {
           const anomaly = {
             type: "no_movement_detected",
             confidence: 0.8,
-            description: `No movement detected for ${staticFrameCount * 1.5} seconds`,
+            description: `No movement detected`,
             timestamp: new Date().toISOString(),
           };
           sendAnomalyIfCooldownPassed(anomaly, socketRef, interviewCode, onAnomalyDetected);
@@ -869,15 +843,15 @@ const performBasicDetection = async ({
         staticFrameCount = 0;
       }
     }
-    
+
     const brightness = calculateBrightness(imageData);
-    if (brightness < 40) {
+    if (brightness < 45) {
       darkFrameCount++;
       if (darkFrameCount > 2) {
         const anomaly = {
           type: "poor_lighting",
           confidence: 0.9,
-          description: `Poor lighting detected (brightness: ${brightness.toFixed(1)})`,
+          description: `Poor lighting detected`,
           timestamp: new Date().toISOString(),
         };
         sendAnomalyIfCooldownPassed(anomaly, socketRef, interviewCode, onAnomalyDetected);
@@ -886,11 +860,10 @@ const performBasicDetection = async ({
     } else {
       darkFrameCount = 0;
     }
-    
-    previousFrame = imageData;
 
+    previousFrame = imageData;
   } catch (error) {
-    // Silent fail
+    console.warn("⚠️ Basic detection error:", error);
   }
 };
 
@@ -898,14 +871,8 @@ const sendAnomalyIfCooldownPassed = (anomaly, socketRef, interviewCode, onAnomal
   const now = Date.now();
   if (now - lastDetectionTime > DETECTION_COOLDOWN) {
     lastDetectionTime = now;
-    
-    sendMalpracticeDetection(
-      socketRef,
-      anomaly.type,
-      anomaly.confidence,
-      interviewCode,
-      anomaly.description
-    );
+
+    sendMalpracticeDetection(socketRef, anomaly.type, anomaly.confidence, interviewCode, anomaly.description);
 
     if (onAnomalyDetected) {
       onAnomalyDetected({
@@ -920,61 +887,77 @@ const sendAnomalyIfCooldownPassed = (anomaly, socketRef, interviewCode, onAnomal
 };
 
 const calculateFrameSimilarity = (frame1, frame2) => {
-  const data1 = frame1.data;
-  const data2 = frame2.data;
-  let differences = 0;
-  const sampleRate = 4;
-  
-  for (let i = 0; i < data1.length; i += 4 * sampleRate) {
-    const diff = Math.abs(data1[i] - data2[i]) + 
-                 Math.abs(data1[i + 1] - data2[i + 1]) + 
-                 Math.abs(data1[i + 2] - data2[i + 2]);
-    if (diff > 30) differences++;
+  try {
+    const data1 = frame1.data;
+    const data2 = frame2.data;
+    let differences = 0;
+    const sampleRate = 4;
+
+    for (let i = 0; i < data1.length; i += 4 * sampleRate) {
+      const diff =
+        Math.abs(data1[i] - data2[i]) +
+        Math.abs(data1[i + 1] - data2[i + 1]) +
+        Math.abs(data1[i + 2] - data2[i + 2]);
+      if (diff > 25) differences++;
+    }
+
+    return 1 - differences / (data1.length / (4 * sampleRate));
+  } catch (error) {
+    console.warn("⚠️ Frame similarity calculation error:", error);
+    return 0;
   }
-  
-  return 1 - (differences / (data1.length / (4 * sampleRate)));
 };
 
 const calculateBrightness = (imageData) => {
-  const data = imageData.data;
-  let total = 0;
-  const sampleRate = 4;
-  
-  for (let i = 0; i < data.length; i += 4 * sampleRate) {
-    total += (data[i] + data[i + 1] + data[i + 2]) / 3;
+  try {
+    const data = imageData.data;
+    let total = 0;
+    const sampleRate = 4;
+
+    for (let i = 0; i < data.length; i += 4 * sampleRate) {
+      total += (data[i] + data[i + 1] + data[i + 2]) / 3;
+    }
+
+    return total / (data.length / (4 * sampleRate));
+  } catch (error) {
+    console.warn("⚠️ Brightness calculation error:", error);
+    return 100; // Return bright value on error
   }
-  
-  return total / (data.length / (4 * sampleRate));
 };
 
+// ADD THIS MISSING EXPORT
 export const setupFaceDetectionCanvas = (videoElement, canvasElement) => {
   if (!videoElement || !canvasElement) return;
 
   const updateCanvasSize = () => {
-    if (videoElement.videoWidth && videoElement.videoHeight) {
-      canvasElement.width = videoElement.videoWidth;
-      canvasElement.height = videoElement.videoHeight;
-    } else {
-      canvasElement.width = videoElement.clientWidth || 320;
-      canvasElement.height = videoElement.clientHeight || 240;
+    try {
+      if (videoElement.videoWidth && videoElement.videoHeight) {
+        canvasElement.width = videoElement.videoWidth;
+        canvasElement.height = videoElement.videoHeight;
+      } else {
+        canvasElement.width = videoElement.clientWidth || 320;
+        canvasElement.height = videoElement.clientHeight || 240;
+      }
+
+      canvasElement.style.position = "absolute";
+      canvasElement.style.top = "0";
+      canvasElement.style.left = "0";
+      canvasElement.style.pointerEvents = "none";
+      canvasElement.style.width = "100%";
+      canvasElement.style.height = "100%";
+      canvasElement.style.zIndex = "10";
+    } catch (error) {
+      console.warn("⚠️ Canvas setup error:", error);
     }
-    
-    canvasElement.style.position = "absolute";
-    canvasElement.style.top = "0";
-    canvasElement.style.left = "0";
-    canvasElement.style.pointerEvents = "none";
-    canvasElement.style.width = "100%";
-    canvasElement.style.height = "100%";
-    canvasElement.style.zIndex = "10";
   };
 
   updateCanvasSize();
-  
-  videoElement.addEventListener('loadedmetadata', updateCanvasSize);
-  videoElement.addEventListener('resize', updateCanvasSize);
-  
+
+  videoElement.addEventListener("loadedmetadata", updateCanvasSize);
+  videoElement.addEventListener("resize", updateCanvasSize);
+
   return () => {
-    videoElement.removeEventListener('loadedmetadata', updateCanvasSize);
-    videoElement.removeEventListener('resize', updateCanvasSize);
+    videoElement.removeEventListener("loadedmetadata", updateCanvasSize);
+    videoElement.removeEventListener("resize", updateCanvasSize);
   };
 };
