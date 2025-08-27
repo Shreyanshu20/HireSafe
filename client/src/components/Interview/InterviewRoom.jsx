@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom"; // Add this import
 import InterviewControls from "./InterviewControls";
 import VideoGrid from "./VideoGrid";
 import ChatModal from "./ChatModal";
@@ -25,6 +26,7 @@ export default function InterviewRoom({
   onLeaveInterview,
   interviewState,
 }) {
+  const navigate = useNavigate(); // Add this hook
   const [showModal, setShowModal] = useState(false);
   const [messages, setMessages] = useState([]);
   const [message, setMessage] = useState("");
@@ -167,14 +169,14 @@ export default function InterviewRoom({
   }, []);
 
   const onEndCall = useCallback(() => {
-    // Clear timeouts
     if (codeChangeTimeoutRef.current) {
       clearTimeout(codeChangeTimeoutRef.current);
     }
     
-    handleEndCall({ cameraStream, socketRef });
+    // Use the same handleEndCall as meetings
+    handleEndCall({ cameraStream, screenStream: null, socketRef });
     onLeaveInterview();
-  }, [cameraStream, socketRef, onLeaveInterview]);
+  }, [cameraStream, socketRef, onLeaveInterview]); // Add navigate to dependencies
 
   // Cleanup on unmount
   useEffect(() => {

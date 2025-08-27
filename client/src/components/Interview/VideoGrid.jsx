@@ -28,8 +28,21 @@ export default function VideoGrid({
     };
     initDetection();
     return () => {
+      console.log("🧹 VideoGrid cleanup - stopping face detection");
       stopInterviewFaceDetection();
       setDetectionActive(false);
+
+      // Clear any remaining video streams
+      Object.values(remoteVideoRefs.current).forEach((videoElement) => {
+        if (videoElement && videoElement.srcObject) {
+          const tracks = videoElement.srcObject.getTracks();
+          tracks.forEach((track) => {
+            console.log(`Stopping remote video ${track.kind} track`);
+            track.stop();
+          });
+          videoElement.srcObject = null;
+        }
+      });
     };
   }, []);
 

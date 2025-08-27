@@ -1,12 +1,15 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useAuth } from "../../context/AuthContext";
 import InterviewSetup from "./InterviewSetup";
 import InterviewRoom from "./InterviewRoom";
 import { connectToInterviewSocketServer } from "./utils/socketUtils";
+import { getPermissions } from "./utils/mediaUtils"; // Add this import
 
 export default function Interviews() {
   const { isAuthenticated, isLoading } = useAuth();
+  const navigate = useNavigate();
 
   const socketRef = useRef();
   const socketIdRef = useRef();
@@ -33,29 +36,11 @@ export default function Interviews() {
     }
   }, [isAuthenticated, isLoading]);
 
+  // Add permissions check like meetings
   useEffect(() => {
     if (isAuthenticated) {
-      const checkPermissions = async () => {
-        try {
-          await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: true,
-          });
-          setVideoAvailable(true);
-          setAudioAvailable(true);
-        } catch (error) {
-          console.error("Error accessing media devices:", error);
-          setVideoAvailable(false);
-          setAudioAvailable(false);
-        }
-      };
-
-      checkPermissions();
-
       const savedInterviewCode = sessionStorage.getItem("currentInterviewCode");
-      const savedInterviewState = sessionStorage.getItem(
-        "currentInterviewState"
-      );
+      const savedInterviewState = sessionStorage.getItem("currentInterviewState");
       const inInterview = sessionStorage.getItem("inInterview") === "true";
 
       if (savedInterviewCode && inInterview) {
@@ -74,6 +59,14 @@ export default function Interviews() {
           setAnomalies,
         });
       }
+
+      // Get permissions like meetings do
+      getPermissions({
+        setVideoAvailable,
+        setAudioAvailable,
+        setCameraStream,
+        localVideoRef
+      });
     }
   }, [isAuthenticated]);
 
@@ -97,13 +90,11 @@ export default function Interviews() {
   };
 
   const handleLeaveInterview = () => {
-    sessionStorage.removeItem("currentInterviewCode");
-    sessionStorage.removeItem("currentInterviewState");
-    sessionStorage.removeItem("inInterview");
+    // Clear all session storage
+    sessionStorage.removeItem('currentInterviewCode');
+    sessionStorage.removeItem('currentInterviewState');
+    sessionStorage.removeItem('inInterview');
     setAskForInterviewCode(true);
-    setAnomalies([]);
-    setVideo(false);
-    setAudio(false);
   };
 
   if (isLoading) {

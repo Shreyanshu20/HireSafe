@@ -49,6 +49,8 @@ export default function InterviewSetup({
         });
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
+          // Store globally for face detection
+          window.localStream = stream;
         }
       } catch (error) {
         console.error("Error accessing camera:", error);
@@ -60,12 +62,27 @@ export default function InterviewSetup({
 
     // Cleanup on unmount
     return () => {
+      console.log("🧹 InterviewSetup cleanup");
       if (localVideoRef.current && localVideoRef.current.srcObject) {
         const tracks = localVideoRef.current.srcObject.getTracks();
-        tracks.forEach((track) => track.stop());
+        tracks.forEach((track) => {
+          console.log(`Stopping setup ${track.kind} track`);
+          track.stop();
+        });
+        localVideoRef.current.srcObject = null;
+      }
+
+      // Clear global stream if it exists
+      if (window.localStream) {
+        console.log("🌐 Clearing global stream in setup cleanup");
+        window.localStream.getTracks().forEach((track) => {
+          console.log(`Stopping global ${track.kind} track`);
+          track.stop();
+        });
+        window.localStream = null;
       }
     };
-  }, []);
+  }, [localVideoRef]);
 
   const handleCreateInterview = async () => {
     setIsCreatingInterview(true);
