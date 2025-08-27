@@ -121,42 +121,59 @@ export default function Meetings() {
   }
 
   return (
-    <>
-      {askForMeetingCode ? (
-        <MeetingSetup
-          meetingCode={meetingCode}
-          setMeetingCode={setMeetingCode}
-          meetingState={meetingState}
-          setMeetingState={setMeetingState}
-          isValidatingCode={isValidatingCode}
-          setIsValidatingCode={setIsValidatingCode}
-          isCreatingMeeting={isCreatingMeeting}
-          setIsCreatingMeeting={setIsCreatingMeeting}
-          localVideoRef={localVideoRef}
-          onJoinMeeting={handleJoinMeeting}
-        />
-      ) : (
-        <MeetingRoom
-          meetingCode={meetingCode}
-          localVideoRef={localVideoRef}
-          videos={videos}
-          video={video}
-          setVideo={setVideo}
-          audio={audio}
-          setAudio={setAudio}
-          screen={screen}
-          setScreen={setScreen}
-          screenStream={screenStream}
-          setScreenStream={setScreenStream}
-          cameraStream={cameraStream}
-          setCameraStream={setCameraStream}
-          videoAvailable={videoAvailable}
-          audioAvailable={audioAvailable}
-          socketRef={socketRef}
-          socketIdRef={socketIdRef}
-          onLeaveMeeting={handleLeaveMeeting}
-        />
-      )}
-    </>
+    <div className="min-h-screen w-full relative bg-black">
+      {/* Same background as Layout */}
+      <div
+        className="fixed inset-0 z-0"
+        style={{
+          background: `
+            radial-gradient(ellipse 120% 80% at 70% 20%, rgba(255, 20, 147, 0.15), transparent 50%),
+            radial-gradient(ellipse 100% 60% at 30% 10%, rgba(0, 255, 255, 0.12), transparent 60%),
+            radial-gradient(ellipse 90% 70% at 50% 0%, rgba(138, 43, 226, 0.18), transparent 65%),
+            radial-gradient(ellipse 110% 50% at 80% 30%, rgba(255, 215, 0, 0.08), transparent 40%),
+            #000000
+          `,
+        }}
+      />
+
+      {/* Content Layer */}
+      <div className="relative z-10 min-h-screen">
+        {askForMeetingCode ? (
+          <MeetingSetup
+            meetingCode={meetingCode}
+            setMeetingCode={setMeetingCode}
+            meetingState={meetingState}
+            setMeetingState={setMeetingState}
+            isValidatingCode={isValidatingCode}
+            setIsValidatingCode={setIsValidatingCode}
+            isCreatingMeeting={isCreatingMeeting}
+            setIsCreatingMeeting={setIsCreatingMeeting}
+            localVideoRef={localVideoRef}
+            onJoinMeeting={handleJoinMeeting}
+          />
+        ) : (
+          <MeetingRoom
+            meetingCode={meetingCode}
+            localVideoRef={localVideoRef}
+            videos={videos}
+            video={video}
+            setVideo={setVideo}
+            audio={audio}
+            setAudio={setAudio}
+            screen={screen}
+            setScreen={setScreen}
+            screenStream={screenStream}
+            setScreenStream={setScreenStream}
+            cameraStream={cameraStream}
+            setCameraStream={setCameraStream}
+            videoAvailable={videoAvailable}
+            audioAvailable={audioAvailable}
+            socketRef={socketRef}
+            socketIdRef={socketIdRef}
+            onLeaveMeeting={handleLeaveMeeting}
+          />
+        )}
+      </div>
+    </div>
   );
 }

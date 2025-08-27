@@ -51,11 +51,7 @@ function Navbar() {
           {/* Brand */}
           <div className="flex-shrink-0">
             <Link to="/" className="flex items-center" onClick={() => setMobileOpen(false)}>
-              <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold text-xl px-4 py-2 rounded-lg transform transition-all duration-200 hover:scale-105 hover:shadow-lg">
-                <span className="bg-gradient-to-r from-white to-blue-100 bg-clip-text text-transparent">
-                  HireSafe
-                </span>
-              </div>
+              
             </Link>
           </div>
 

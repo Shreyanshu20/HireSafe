@@ -117,41 +117,58 @@ export default function Interviews() {
   }
 
   return (
-    <>
-      {askForInterviewCode ? (
-        <InterviewSetup
-          interviewCode={interviewCode}
-          setInterviewCode={setInterviewCode}
-          interviewState={interviewState}
-          setInterviewState={setInterviewState}
-          isValidatingCode={isValidatingCode}
-          setIsValidatingCode={setIsValidatingCode}
-          isCreatingInterview={isCreatingInterview}
-          setIsCreatingInterview={setIsCreatingInterview}
-          localVideoRef={localVideoRef}
-          onJoinInterview={handleJoinInterview}
-        />
-      ) : (
-        <InterviewRoom
-          interviewCode={interviewCode}
-          localVideoRef={localVideoRef}
-          videos={videos}
-          video={video}
-          setVideo={setVideo}
-          audio={audio}
-          setAudio={setAudio}
-          cameraStream={cameraStream}
-          setCameraStream={setCameraStream}
-          videoAvailable={videoAvailable}
-          audioAvailable={audioAvailable}
-          socketRef={socketRef}
-          socketIdRef={socketIdRef}
-          anomalies={anomalies}
-          setAnomalies={setAnomalies}
-          onLeaveInterview={handleLeaveInterview}
-          interviewState={interviewState}
-        />
-      )}
-    </>
+    <div className="min-h-screen w-full relative bg-black">
+      {/* Same background as Layout */}
+      <div
+        className="fixed inset-0 z-0"
+        style={{
+          background: `
+            radial-gradient(ellipse 120% 80% at 70% 20%, rgba(255, 20, 147, 0.15), transparent 50%),
+            radial-gradient(ellipse 100% 60% at 30% 10%, rgba(0, 255, 255, 0.12), transparent 60%),
+            radial-gradient(ellipse 90% 70% at 50% 0%, rgba(138, 43, 226, 0.18), transparent 65%),
+            radial-gradient(ellipse 110% 50% at 80% 30%, rgba(255, 215, 0, 0.08), transparent 40%),
+            #000000
+          `,
+        }}
+      />
+
+      {/* Content Layer */}
+      <div className="relative z-10 min-h-screen">
+        {askForInterviewCode ? (
+          <InterviewSetup
+            interviewCode={interviewCode}
+            setInterviewCode={setInterviewCode}
+            interviewState={interviewState}
+            setInterviewState={setInterviewState}
+            isValidatingCode={isValidatingCode}
+            setIsValidatingCode={setIsValidatingCode}
+            isCreatingInterview={isCreatingInterview}
+            setIsCreatingInterview={setIsCreatingInterview}
+            localVideoRef={localVideoRef}
+            onJoinInterview={handleJoinInterview}
+          />
+        ) : (
+          <InterviewRoom
+            interviewCode={interviewCode}
+            localVideoRef={localVideoRef}
+            videos={videos}
+            video={video}
+            setVideo={setVideo}
+            audio={audio}
+            setAudio={setAudio}
+            cameraStream={cameraStream}
+            setCameraStream={setCameraStream}
+            videoAvailable={videoAvailable}
+            audioAvailable={audioAvailable}
+            socketRef={socketRef}
+            socketIdRef={socketIdRef}
+            anomalies={anomalies}
+            setAnomalies={setAnomalies}
+            onLeaveInterview={handleLeaveInterview}
+            interviewState={interviewState}
+          />
+        )}
+      </div>
+    </div>
   );
 }
