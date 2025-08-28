@@ -7,6 +7,9 @@ let meetingMessages = {};
 let interviewMessages = {};
 let timeOnline = {};
 
+// NEW: Track user states for meetings
+let meetingUserStates = {}; // { roomCode: { socketId: { video: true, audio: true, screen: false } } }
+
 export const connectToSocket = (server) => {
   const io = new Server(server, {
     cors: {
@@ -22,25 +25,76 @@ export const connectToSocket = (server) => {
     console.log('User connected:', socket.id);
     timeOnline[socket.id] = new Date();
     
-    // =================== MEETING EVENTS (EXISTING) ===================
+    // =================== MEETING EVENTS (FIXED) ===================
     socket.on('join-call', (meetingCode) => {
       console.log(`User ${socket.id} joining MEETING room: ${meetingCode}`);
       
       if (meetingConnections[meetingCode] === undefined) {
         meetingConnections[meetingCode] = [];
+        meetingUserStates[meetingCode] = {};
       }
       
       meetingConnections[meetingCode].push(socket.id);
       socket.join(`meeting-${meetingCode}`);
       
+      // Initialize user state
+      meetingUserStates[meetingCode][socket.id] = {
+        video: true,
+        audio: true,
+        screen: false
+      };
+      
       const clients = Array.from(io.sockets.adapter.rooms.get(`meeting-${meetingCode}`) || []);
+      
+      // CRITICAL: Send current user states to new user IMMEDIATELY
+      socket.emit('user-states', meetingUserStates[meetingCode]);
+      
+      // Notify others about new user
       socket.to(`meeting-${meetingCode}`).emit('user-joined', socket.id, clients);
       socket.emit('user-joined', socket.id, clients);
+      
+      console.log(`📊 Sent user states to ${socket.id}:`, meetingUserStates[meetingCode]);
     });
 
     socket.on('signal', (toId, message) => {
       console.log(`Signal from ${socket.id} to ${toId}`);
       io.to(toId).emit('signal', socket.id, message);
+    });
+
+    // NEW: Camera toggle event
+    socket.on('toggle-camera', (isEnabled) => {
+      console.log(`User ${socket.id} ${isEnabled ? 'enabled' : 'disabled'} camera`);
+      
+      // Find meeting room and update state
+      for (const [roomCode, clients] of Object.entries(meetingConnections)) {
+        if (clients.includes(socket.id)) {
+          if (meetingUserStates[roomCode] && meetingUserStates[roomCode][socket.id]) {
+            meetingUserStates[roomCode][socket.id].video = isEnabled;
+          }
+          
+          // Broadcast to all other users in the room
+          socket.to(`meeting-${roomCode}`).emit('user-camera-toggled', socket.id, isEnabled);
+          break;
+        }
+      }
+    });
+
+    // NEW: Microphone toggle event
+    socket.on('toggle-microphone', (isEnabled) => {
+      console.log(`User ${socket.id} ${isEnabled ? 'enabled' : 'disabled'} microphone`);
+      
+      // Find meeting room and update state
+      for (const [roomCode, clients] of Object.entries(meetingConnections)) {
+        if (clients.includes(socket.id)) {
+          if (meetingUserStates[roomCode] && meetingUserStates[roomCode][socket.id]) {
+            meetingUserStates[roomCode][socket.id].audio = isEnabled;
+          }
+          
+          // Broadcast to all other users in the room
+          socket.to(`meeting-${roomCode}`).emit('user-microphone-toggled', socket.id, isEnabled);
+          break;
+        }
+      }
     });
 
     socket.on('chat-message', (message, sender) => {
@@ -69,7 +123,7 @@ export const connectToSocket = (server) => {
       handleMeetingDisconnect(socket);
     });
 
-    // =================== INTERVIEW EVENTS (NEW) ===================
+    // =================== INTERVIEW EVENTS (UNCHANGED) ===================
     socket.on('join-interview', (interviewCode) => {
       console.log(`User ${socket.id} joining INTERVIEW room: ${interviewCode}`);
       
@@ -186,38 +240,36 @@ export const connectToSocket = (server) => {
       handleInterviewDisconnect(socket);
     });
 
-    // =================== SCREEN SHARING EVENTS ===================
+    // =================== SCREEN SHARING EVENTS (FIXED) ===================
     socket.on('screen-share-started', () => {
       console.log(`User ${socket.id} started screen sharing`);
       
-      // Find meeting room
-      let roomCode = null;
-      for (const [room, clients] of Object.entries(meetingConnections)) {
+      // Find meeting room and update state
+      for (const [roomCode, clients] of Object.entries(meetingConnections)) {
         if (clients.includes(socket.id)) {
-          roomCode = room;
+          if (meetingUserStates[roomCode] && meetingUserStates[roomCode][socket.id]) {
+            meetingUserStates[roomCode][socket.id].screen = true;
+          }
+          
+          socket.to(`meeting-${roomCode}`).emit('screen-share-started', socket.id);
           break;
         }
-      }
-      
-      if (roomCode) {
-        socket.to(`meeting-${roomCode}`).emit('screen-share-started', socket.id);
       }
     });
 
     socket.on('screen-share-stopped', () => {
       console.log(`User ${socket.id} stopped screen sharing`);
       
-      // Find meeting room
-      let roomCode = null;
-      for (const [room, clients] of Object.entries(meetingConnections)) {
+      // Find meeting room and update state
+      for (const [roomCode, clients] of Object.entries(meetingConnections)) {
         if (clients.includes(socket.id)) {
-          roomCode = room;
+          if (meetingUserStates[roomCode] && meetingUserStates[roomCode][socket.id]) {
+            meetingUserStates[roomCode][socket.id].screen = false;
+          }
+          
+          socket.to(`meeting-${roomCode}`).emit('screen-share-stopped', socket.id);
           break;
         }
-      }
-      
-      if (roomCode) {
-        socket.to(`meeting-${roomCode}`).emit('screen-share-stopped', socket.id);
       }
     });
 
@@ -241,11 +293,18 @@ export const connectToSocket = (server) => {
         const index = clients.indexOf(socket.id);
         if (index !== -1) {
           clients.splice(index, 1);
+          
+          // Clean up user state
+          if (meetingUserStates[roomCode] && meetingUserStates[roomCode][socket.id]) {
+            delete meetingUserStates[roomCode][socket.id];
+          }
+          
           socket.to(`meeting-${roomCode}`).emit('user-left', socket.id);
           
           if (clients.length === 0) {
             delete meetingConnections[roomCode];
             delete meetingMessages[roomCode];
+            delete meetingUserStates[roomCode];
           }
           break;
         }

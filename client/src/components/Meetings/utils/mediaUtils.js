@@ -37,7 +37,7 @@ export const getPermissions = async ({
       setScreenAvailable(false);
     }
 
-    // Get camera stream for preview
+    // Get camera stream for preview - ONLY ONCE
     const userMediaStream = await navigator.mediaDevices.getUserMedia({
       video: true,
       audio: true,
@@ -46,11 +46,13 @@ export const getPermissions = async ({
     if (userMediaStream) {
       setCameraStream(userMediaStream);
       window.localStream = userMediaStream;
-      window.cameraStreamBackup = userMediaStream; // BACKUP REFERENCE
+      window.cameraStreamBackup = userMediaStream;
 
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = userMediaStream;
       }
+      
+      console.log("📹 Initial camera stream created:", userMediaStream);
     }
   } catch (error) {
     console.error("Permission error:", error);
@@ -91,6 +93,7 @@ export const initializeAudioContext = () => {
   // Audio context initialization
 };
 
+// SIMPLIFIED: Just toggle track enabled, NEVER KILL STREAMS
 export const getUserMedia = ({
   video,
   audio,
@@ -104,120 +107,104 @@ export const getUserMedia = ({
   socketIdRef,
   localVideoRef
 }) => {
+  console.log("🎬 getUserMedia called:", { video, audio });
+  
+  // If we have a camera stream, just toggle the tracks - DON'T CREATE NEW STREAMS
+  if (cameraStream && cameraStream.getTracks().length > 0) {
+    console.log("📹 Toggling existing stream tracks");
+    
+    // Toggle video tracks
+    cameraStream.getVideoTracks().forEach(track => {
+      track.enabled = video;
+      console.log(`Video track enabled: ${track.enabled}`);
+    });
+    
+    // Toggle audio tracks
+    cameraStream.getAudioTracks().forEach(track => {
+      track.enabled = audio;
+      console.log(`Audio track enabled: ${track.enabled}`);
+    });
+
+    // ALWAYS maintain backups
+    window.cameraStreamBackup = cameraStream;
+    
+    // Update what's sent to peers (camera or screen)
+    const streamToSend = (screen && screenStream) ? screenStream : cameraStream;
+    window.localStream = streamToSend;
+    updatePeerConnections(streamToSend, socketRef, socketIdRef);
+    
+    return; // EXIT EARLY - DON'T CREATE NEW STREAMS
+  }
+
+  // Only create new stream if we don't have one
   if ((video && videoAvailable) || (audio && audioAvailable)) {
-    // If we already have a camera stream, just toggle tracks
-    if (cameraStream && cameraStream.getTracks().length > 0) {
-      console.log("📹 Using existing camera stream, toggling tracks");
-      
-      cameraStream.getVideoTracks().forEach(track => track.enabled = video);
-      cameraStream.getAudioTracks().forEach(track => track.enabled = audio);
-
-      // Update local preview
-      if (localVideoRef && localVideoRef.current) {
-        localVideoRef.current.srcObject = cameraStream;
-      }
-
-      // Send current stream (camera or screen)
-      const streamToSend = (screen && screenStream) ? screenStream : cameraStream;
-      if (streamToSend) {
-        window.localStream = streamToSend;
-        updatePeerConnections(streamToSend, socketRef, socketIdRef);
-      }
-      return;
-    }
-
-    // Create new camera stream only if we don't have one
     navigator.mediaDevices
       .getUserMedia({ video: video && videoAvailable, audio: audio && audioAvailable })
-      .then((stream) => getUserMediaSuccess({
-        stream,
-        cameraStream,
-        setCameraStream,
-        screen,
-        screenStream,
-        socketRef,
-        socketIdRef,
-        localVideoRef
-      }))
+      .then((stream) => {
+        console.log("📹 Created NEW camera stream:", stream);
+        setCameraStream(stream);
+        window.localStream = stream;
+        window.cameraStreamBackup = stream;
+
+        // Set to local video
+        if (localVideoRef && localVideoRef.current && !screen) {
+          localVideoRef.current.srcObject = stream;
+        }
+
+        // Send to peers
+        const streamToSend = (screen && screenStream) ? screenStream : stream;
+        updatePeerConnections(streamToSend, socketRef, socketIdRef);
+      })
       .catch((error) => {
         console.error("Media error:", error);
         toast.error("Failed to access media");
       });
-  } else {
-    // NEVER KILL CAMERA STREAM - just disable tracks
-    if (cameraStream) {
-      cameraStream.getVideoTracks().forEach(track => track.enabled = video);
-      cameraStream.getAudioTracks().forEach(track => track.enabled = audio);
-    }
-
-    // Send current stream (camera or screen)
-    const streamToSend = (screen && screenStream) ? screenStream : cameraStream;
-    if (streamToSend) {
-      window.localStream = streamToSend;
-      updatePeerConnections(streamToSend, socketRef, socketIdRef);
-    }
   }
 };
 
 export const handleEndCall = ({ cameraStream, screenStream, socketRef }) => {
   try {
+    console.log("🔚 Ending call and cleaning up...");
+    
     if (cameraStream && cameraStream.getTracks) {
-      cameraStream.getTracks().forEach((track) => track.stop());
+      cameraStream.getTracks().forEach((track) => {
+        track.stop();
+      });
     }
+    
     if (screenStream && screenStream.getTracks) {
-      screenStream.getTracks().forEach((track) => track.stop());
+      screenStream.getTracks().forEach((track) => {
+        track.stop();
+      });
     }
+    
+    if (window.cameraStreamBackup && window.cameraStreamBackup.getTracks) {
+      window.cameraStreamBackup.getTracks().forEach((track) => {
+        track.stop();
+      });
+      window.cameraStreamBackup = null;
+    }
+    
+    for (let id in connections) {
+      if (connections[id]) {
+        connections[id].close();
+        delete connections[id];
+      }
+    }
+    
     if (socketRef.current) {
       socketRef.current.disconnect();
     }
+    
+    window.localStream = null;
     
     sessionStorage.removeItem('currentMeetingCode');
     sessionStorage.removeItem('currentMeetingState');
     sessionStorage.removeItem('inMeeting');
     
   } catch (error) {
-    console.error("End call error:", error);
+    console.error("❌ Error ending call:", error);
   }
+  
   window.location.href = "/";
-};
-
-const getUserMediaSuccess = ({
-  stream,
-  cameraStream,
-  setCameraStream,
-  screen,
-  screenStream,
-  socketRef,
-  socketIdRef,
-  localVideoRef
-}) => {
-  // DON'T KILL EXISTING CAMERA STREAM IF IT'S WORKING
-  if (cameraStream && cameraStream.getTracks().length > 0 && !screen) {
-    console.log("📹 Keeping existing camera stream");
-    return;
-  }
-
-  // Only stop previous tracks if we're not screen sharing
-  if (!screen) {
-    try {
-      if (cameraStream && cameraStream.getTracks) {
-        cameraStream.getTracks().forEach((track) => track.stop());
-      }
-    } catch (error) {
-      console.error("Stop previous tracks error:", error);
-    }
-  }
-
-  setCameraStream(stream);
-  window.cameraStreamBackup = stream; // BACKUP REFERENCE
-
-  // ALWAYS show camera in local preview (unless screen sharing)
-  if (localVideoRef && localVideoRef.current && !screen) {
-    localVideoRef.current.srcObject = stream;
-  }
-
-  // Send appropriate stream to peers
-  const streamToSend = (screen && screenStream) ? screenStream : stream;
-  window.localStream = streamToSend;
-  updatePeerConnections(streamToSend, socketRef, socketIdRef);
 };

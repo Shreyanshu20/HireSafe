@@ -32,10 +32,32 @@ export default function VideoControls({
     }
   }, [audio, video]);
 
-  const toggleVideo  = () => { initializeAudioContext(); setVideo(!video); };
-  const toggleAudio  = () => { initializeAudioContext(); setAudio(!audio); };
+  const toggleVideo = () => { 
+    initializeAudioContext(); 
+    const newVideoState = !video;
+    console.log(`🎥 Toggling camera: ${video} -> ${newVideoState}`);
+    
+    setVideo(newVideoState); 
+    
+    // Emit socket event for camera toggle
+    if (socketRef.current) {
+      socketRef.current.emit("toggle-camera", newVideoState);
+    }
+  };
+  
+  const toggleAudio = () => { 
+    initializeAudioContext(); 
+    const newAudioState = !audio;
+    console.log(`🎤 Toggling audio: ${audio} -> ${newAudioState}`);
+    
+    setAudio(newAudioState); 
+    
+    // Emit socket event for microphone toggle
+    if (socketRef.current) {
+      socketRef.current.emit("toggle-microphone", newAudioState);
+    }
+  };
 
-  // FIXED: Screen share WITHOUT killing camera
   const handleScreen = async () => {
     initializeAudioContext();
 
@@ -53,7 +75,7 @@ export default function VideoControls({
           socketRef.current.emit("screen-share-stopped");
         }
         
-        // Switch back to camera - USE BACKUP STREAM
+        // Switch back to camera
         if (window.cameraStreamBackup) {
           window.localStream = window.cameraStreamBackup;
           updatePeerConnections(window.cameraStreamBackup);
@@ -86,13 +108,10 @@ export default function VideoControls({
         socketRef.current.emit("screen-share-started");
       }
       
-      // CRITICAL FIX: Send screen stream to peers but keep camera reference
+      // Send screen stream to peers
       window.localStream = stream;
       updatePeerConnections(stream);
 
-      // KEEP showing camera in local preview (don't switch to screen)
-      // The screen will be shown in the main area by VideoGrid logic
-      
       // Handle browser stop
       stream.getVideoTracks()[0].onended = () => {
         setScreen(false);
@@ -116,7 +135,6 @@ export default function VideoControls({
     }
   };
 
-  // SIMPLE peer updates
   const updatePeerConnections = (streamToSend) => {
     console.log(`🔄 Updating ${Object.keys(connections).length} peers`);
     
@@ -176,7 +194,7 @@ export default function VideoControls({
       <div className="rounded-full bg-slate-900/70 backdrop-blur border border-white/10 px-3 py-2 flex items-center gap-3">
         <Btn active={video}  onClick={toggleVideo}  icon={video ? "fa-video" : "fa-video-slash"} label="Toggle camera" />
         <Btn active={audio}  onClick={toggleAudio}  icon={audio ? "fa-microphone" : "fa-microphone-slash"} label="Toggle mic" />
-        <Btn active={screen} onClick={handleScreen} icon={screen ? "fa-display" : "fa-up-right-from-square"} label={screen ? "Stop presenting" : "Present screen"} />
+        <Btn active={screen} onClick={handleScreen} icon="fa-display" label={screen ? "Stop presenting" : "Present screen"} />
 
         <div className="relative">
           <Btn active={false} onClick={onOpenChat} icon="fa-message" label="Open chat" />

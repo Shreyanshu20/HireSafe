@@ -35,6 +35,7 @@ export const connectToSocketServer = ({
   });
 
   socketRef.current.on("user-left", (id) => {
+    console.log(`User ${id} left the meeting`);
     setVideos((videos) => videos.filter((video) => video.socketId !== id));
     if (connections[id]) {
       connections[id].close();
@@ -46,13 +47,77 @@ export const connectToSocketServer = ({
     handleUserJoined(id, clients, socketRef, socketIdRef, setVideos, videoRef);
   });
 
-  // SIMPLE screen share handling - JUST SET FLAGS
+  // Handle initial user states when joining
+  socketRef.current.on("user-states", (userStates) => {
+    console.log("📊 Received initial user states:", userStates);
+    window.meetingUserStates = userStates;
+    
+    // Update existing videos with initial states
+    setVideos((videos) => 
+      videos.map(video => {
+        const userState = userStates[video.socketId];
+        if (userState) {
+          return {
+            ...video,
+            isCameraOff: !userState.video,
+            isMuted: !userState.audio,
+            isScreenShare: userState.screen
+          };
+        }
+        return video;
+      })
+    );
+  });
+
+  // FIXED: Handle camera toggle events - update video object immediately
+  socketRef.current.on("user-camera-toggled", (userId, isEnabled) => {
+    console.log(`📹 User ${userId} ${isEnabled ? 'enabled' : 'disabled'} camera`);
+    
+    // Update global state
+    if (!window.meetingUserStates) window.meetingUserStates = {};
+    if (!window.meetingUserStates[userId]) window.meetingUserStates[userId] = {};
+    window.meetingUserStates[userId].video = isEnabled;
+    
+    // IMMEDIATELY update video state for UI
+    setVideos((videos) => 
+      videos.map(video => 
+        video.socketId === userId 
+          ? { ...video, isCameraOff: !isEnabled }
+          : video
+      )
+    );
+  });
+
+  // FIXED: Handle microphone toggle events - update video object immediately
+  socketRef.current.on("user-microphone-toggled", (userId, isEnabled) => {
+    console.log(`🎤 User ${userId} ${isEnabled ? 'enabled' : 'disabled'} microphone`);
+    
+    // Update global state
+    if (!window.meetingUserStates) window.meetingUserStates = {};
+    if (!window.meetingUserStates[userId]) window.meetingUserStates[userId] = {};
+    window.meetingUserStates[userId].audio = isEnabled;
+    
+    // IMMEDIATELY update video state for UI
+    setVideos((videos) => 
+      videos.map(video => 
+        video.socketId === userId 
+          ? { ...video, isMuted: !isEnabled }
+          : video
+      )
+    );
+  });
+
+  // Screen share handling
   socketRef.current.on("screen-share-started", (fromId) => {
     console.log(`🖥️ ${fromId} started screen sharing`);
     window.screenShareUsers = window.screenShareUsers || new Set();
     window.screenShareUsers.add(fromId);
     
-    // UPDATE existing videos to mark as screen share
+    // Update global state
+    if (!window.meetingUserStates) window.meetingUserStates = {};
+    if (!window.meetingUserStates[fromId]) window.meetingUserStates[fromId] = {};
+    window.meetingUserStates[fromId].screen = true;
+    
     setVideos((videos) => 
       videos.map(video => 
         video.socketId === fromId 
@@ -68,7 +133,11 @@ export const connectToSocketServer = ({
       window.screenShareUsers.delete(fromId);
     }
     
-    // UPDATE existing videos to mark as camera
+    // Update global state
+    if (window.meetingUserStates && window.meetingUserStates[fromId]) {
+      window.meetingUserStates[fromId].screen = false;
+    }
+    
     setVideos((videos) => 
       videos.map(video => 
         video.socketId === fromId 
@@ -129,16 +198,19 @@ const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, 
       }
     };
 
-    // SIMPLE stream handling - NO COMPLEX DETECTION
     connections[socketListId].ontrack = (event) => {
       const [stream] = event.streams;
       
-      // SIMPLE detection - just check if this user is screen sharing
-      const isScreenShare = window.screenShareUsers?.has(socketListId) || false;
+      // Get user state from global state or default
+      const userState = window.meetingUserStates?.[socketListId] || { video: true, audio: true, screen: false };
+      const isScreenShare = window.screenShareUsers?.has(socketListId) || userState.screen || false;
       
       console.log(`📺 Stream from ${socketListId}:`, {
         isScreenShare,
-        tracks: stream.getTracks().length
+        tracks: stream.getTracks().length,
+        userState,
+        videoEnabled: stream.getVideoTracks()[0]?.enabled,
+        audioEnabled: stream.getAudioTracks()[0]?.enabled
       });
       
       setVideos((videos) => {
@@ -151,8 +223,9 @@ const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, 
           isScreenShare,
           autoPlay: true,
           playsinline: true,
-          isMuted: !stream.getAudioTracks().some(track => track.enabled),
-          isCameraOff: !stream.getVideoTracks().some(track => track.enabled),
+          // CRITICAL: Use socket state, not track state (tracks might be enabled but user turned off camera)
+          isMuted: !userState.audio,
+          isCameraOff: !userState.video,
         };
         
         return [...filtered, newVideo];

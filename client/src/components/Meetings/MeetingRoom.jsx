@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { toast } from "react-toastify";
 import VideoControls from "./VideoControls";
 import VideoGrid from "./VideoGrid";
@@ -35,30 +35,73 @@ export default function MeetingRoom({
     return () => socketRef.current?.off("chat-message", addMessage);
   }, [socketRef, socketIdRef]);
 
-  const sendMessage = () => {
+  // ✅ MEMOIZE CALLBACKS to prevent unnecessary re-renders
+  const sendMessage = useCallback(() => {
     if (!message.trim()) return;
     socketRef.current?.emit("chat-message", message, "You");
     setMessage("");
-  };
+  }, [message, socketRef]);
 
-  const openChat = () => { setShowModal(true); setNewMessage(0); };
-  const closeChat = () => setShowModal(false);
-  const handleMessage = (e) => setMessage(e.target.value);
+  const openChat = useCallback(() => { 
+    setShowModal(true); 
+    setNewMessage(0); 
+  }, []);
 
-  const onEndCall = () => {
+  const closeChat = useCallback(() => setShowModal(false), []);
+
+  // ✅ CRITICAL FIX: Don't cause re-renders - just update state
+  const handleMessage = useCallback((e) => {
+    setMessage(e.target.value);
+  }, []);
+
+  const onEndCall = useCallback(() => {
     handleEndCall({ cameraStream, screenStream, socketRef });
     onLeaveMeeting();
     toast.info("You left the meeting");
-  };
+  }, [cameraStream, screenStream, socketRef, onLeaveMeeting]);
 
-  const copyCode = async () => {
+  const copyCode = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(meetingCode);
       toast.success("Meeting code copied");
     } catch {
       toast.info("Could not copy. Long-press to copy.");
     }
-  };
+  }, [meetingCode]);
+
+  // ✅ MEMOIZE VideoGrid props to prevent unnecessary re-renders
+  const videoGridProps = useMemo(() => ({
+    localVideoRef,
+    videos,
+    screen,
+    screenStream,
+    video,
+    audio
+  }), [localVideoRef, videos, screen, screenStream, video, audio]);
+
+  // ✅ MEMOIZE VideoControls props
+  const videoControlsProps = useMemo(() => ({
+    video, setVideo,
+    audio, setAudio,
+    screen, setScreen,
+    newMessage, 
+    onOpenChat: openChat,
+    onEndCall,
+    videoAvailable, 
+    audioAvailable,
+    screenStream, 
+    setScreenStream,
+    cameraStream, 
+    setCameraStream,
+    socketRef, 
+    socketIdRef,
+    localVideoRef
+  }), [
+    video, setVideo, audio, setAudio, screen, setScreen,
+    newMessage, openChat, onEndCall, videoAvailable, audioAvailable,
+    screenStream, setScreenStream, cameraStream, setCameraStream,
+    socketRef, socketIdRef, localVideoRef
+  ]);
 
   return (
     <div className="h-screen flex flex-col">
@@ -85,29 +128,15 @@ export default function MeetingRoom({
       </div>
 
       {/* Video area - takes remaining space */}
-      <div className="flex-1 min-h-0 px-4 pb-20"> {/* pb-20 for controls space */}
-        <VideoGrid
-          localVideoRef={localVideoRef}
-          videos={videos}
-          screen={screen}
-          screenStream={screenStream}
-        />
+      <div className="flex-1 min-h-0 px-4 pb-20">
+        {/* ✅ Use memoized props to prevent re-renders */}
+        <VideoGrid {...videoGridProps} />
       </div>
 
       {/* Floating controls - positioned absolutely */}
-      <VideoControls
-        video={video} setVideo={setVideo}
-        audio={audio} setAudio={setAudio}
-        screen={screen} setScreen={setScreen}
-        newMessage={newMessage} onOpenChat={openChat}
-        onEndCall={onEndCall}
-        videoAvailable={videoAvailable} audioAvailable={audioAvailable}
-        screenStream={screenStream} setScreenStream={setScreenStream}
-        cameraStream={cameraStream} setCameraStream={setCameraStream}
-        socketRef={socketRef} socketIdRef={socketIdRef}
-        localVideoRef={localVideoRef}
-      />
+      <VideoControls {...videoControlsProps} />
 
+      {/* ✅ ISOLATE CHAT MODAL - only render when needed */}
       {showModal && (
         <ChatModal
           messages={messages}
