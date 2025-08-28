@@ -200,78 +200,82 @@ export default function InterviewSetup({
   };
 
   return (
-    <div className="min-h-screen p-4 md:p-6 lg:p-8 flex items-center justify-center bg-gradient-to-br from-gray-900 via-purple-900/20 to-gray-900">
+    <div className="min-h-screen p-2 sm:p-4 md:p-6 lg:p-8 flex items-center justify-center bg-gradient-to-br from-gray-900 via-purple-900/20 to-gray-900">
       <div className="w-full max-w-6xl">
-        <div className="rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-xl border border-white/10 shadow-2xl">
-          {/* Header / Tabs - Enhanced responsiveness */}
-          <div className="flex flex-col gap-6 p-4 sm:p-6 border-b border-white/10 md:flex-row md:items-center md:justify-between">
-            {/* Title Section */}
-            <div className="flex items-start md:items-center gap-4">
-              <div className="h-12 w-12 rounded-xl bg-purple-600/20 flex items-center justify-center shrink-0">
-                <i className="fa-solid fa-user-tie text-purple-400 text-xl"></i>
+        <div className="rounded-xl sm:rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-xl border border-white/10 shadow-2xl">
+          {/* Header / Tabs - More responsive */}
+          <div className="flex flex-col gap-4 sm:gap-6 p-3 sm:p-4 md:p-6 border-b border-white/10 md:flex-row md:items-center md:justify-between">
+            {/* Title Section - Improved for small screens */}
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-purple-600/20 flex items-center justify-center shrink-0">
+                <i className="fa-solid fa-user-tie text-purple-400 text-lg sm:text-xl"></i>
               </div>
               <div className="min-w-0">
-                <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white tracking-tight">
                   Interviews
                 </h1>
-                <p className="text-sm text-slate-300 mt-1">
-                  Create or join an interview session
+                <p className="text-xs sm:text-sm text-slate-300 mt-0.5 sm:mt-1">
+                  Create or join a session
                 </p>
               </div>
             </div>
 
-            {/* Enhanced Tabs */}
-            <div className="flex rounded-xl bg-slate-900/60 border border-white/10 p-1 self-stretch md:self-center">
+            {/* Tabs - Better mobile experience */}
+            <div className="flex rounded-lg sm:rounded-xl bg-slate-900/60 border border-white/10 p-1 self-stretch md:self-center">
               <button
                 onClick={() => setInterviewState("create")}
-                className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                className={`flex-1 px-3 sm:px-6 py-2 sm:py-2.5 rounded-md sm:rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 flex items-center justify-center gap-1.5 sm:gap-2 ${
                   interviewState === "create"
                     ? "bg-purple-600 text-white shadow-lg"
                     : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
                 }`}
                 disabled={isCreatingInterview}
               >
-                <i className="fa-solid fa-plus mr-2"></i>
-                <span className="hidden sm:inline">Create</span> Interview
+                <i className="fa-solid fa-plus"></i>
+                Create
               </button>
               <button
                 onClick={() => setInterviewState("join")}
-                className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                className={`flex-1 px-3 sm:px-6 py-2 sm:py-2.5 rounded-md sm:rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 flex items-center justify-center gap-1.5 sm:gap-2 ${
                   interviewState === "join"
                     ? "bg-purple-600 text-white shadow-lg"
                     : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
                 }`}
               >
-                <i className="fa-solid fa-right-to-bracket mr-2"></i>
-                <span className="hidden sm:inline">Join</span> Interview
+                <i className="fa-solid fa-right-to-bracket"></i>
+                Join
               </button>
             </div>
           </div>
 
           {/* Main Content - Improved grid layout */}
-          <div className="grid lg:grid-cols-2 gap-6 p-4 sm:p-6">
+          <div className="grid lg:grid-cols-2 gap-4 sm:gap-6 p-3 sm:p-4 md:p-6">
             {/* Left Column - Setup Options */}
-            <div className="space-y-6">
-              {/* Create/Join Section with improved responsiveness */}
-              <div className="space-y-4 bg-slate-900/40 rounded-xl p-4 sm:p-6">
+            <div className="space-y-4 sm:space-y-6">
+              {/* Create/Join Section */}
+              <div className="space-y-4 bg-slate-900/40 rounded-lg sm:rounded-xl p-3 sm:p-4 md:p-6">
                 {interviewState === "create" ? (
-                  // Create mode UI
+                  // Create mode UI - More responsive
                   <div className="space-y-4">
-                    <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <h2 className="text-base sm:text-lg font-semibold text-white flex items-center gap-2">
                       <i className="fa-solid fa-bolt text-yellow-400"></i>
                       Create New Interview
                     </h2>
 
                     {/* Code Display Panel */}
-                    <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4 sm:p-6">
-                      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                    <div className="rounded-lg sm:rounded-xl border border-white/10 bg-slate-900/60 p-3 sm:p-4">
+                      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start sm:items-center justify-between">
                         <div className="w-full sm:w-auto">
-                          <p className="text-sm text-slate-400 mb-1">Interview Code</p>
-                          <p className="text-xl sm:text-2xl font-mono tracking-wider text-white">
+                          <p className="text-xs sm:text-sm text-slate-400 mb-1">
+                            Interview Code
+                          </p>
+                          <p className="text-lg sm:text-xl md:text-2xl font-mono tracking-wider text-white">
                             {isCreatingInterview ? (
                               <span className="flex items-center gap-2 text-purple-400">
                                 <i className="fa-solid fa-spinner animate-spin"></i>
-                                Generating...
+                                <span className="text-base sm:text-lg">
+                                  Generating...
+                                </span>
                               </span>
                             ) : (
                               interviewCode || "——————"
@@ -284,38 +288,46 @@ export default function InterviewSetup({
                           <button
                             onClick={handleCreateInterview}
                             disabled={isCreatingInterview}
-                            className="flex-1 sm:flex-initial px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:bg-slate-700 text-white font-medium transition-colors"
+                            className="flex-1 sm:flex-initial px-3 sm:px-4 py-2 text-xs sm:text-sm rounded-lg bg-purple-600 hover:bg-purple-700 disabled:bg-slate-700 text-white font-medium transition-colors flex items-center justify-center gap-1.5"
                           >
-                            <i className="fa-solid fa-refresh mr-2"></i>
-                            New Code
+                            <i className="fa-solid fa-refresh"></i>
+                            <span className="hidden sm:inline">New Code</span>
                           </button>
                           <button
                             onClick={copyCode}
                             disabled={!interviewCode || isCreatingInterview}
-                            className="px-4 py-2 rounded-lg border border-white/10 hover:bg-slate-800 disabled:opacity-50 text-white transition-colors"
+                            className="px-3 sm:px-4 py-2 rounded-lg border border-white/10 hover:bg-slate-800 disabled:opacity-50 text-white transition-colors"
                           >
-                            <i className={`fa-solid ${copied ? "fa-check text-green-400" : "fa-copy"}`}></i>
+                            <i
+                              className={`fa-solid ${
+                                copied ? "fa-check text-green-400" : "fa-copy"
+                              }`}
+                            ></i>
                           </button>
                         </div>
                       </div>
                     </div>
                   </div>
                 ) : (
-                  // Join mode UI
+                  // Join mode UI - More responsive
                   <div className="space-y-4">
-                    <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <h2 className="text-base sm:text-lg font-semibold text-white flex items-center gap-2">
                       <i className="fa-solid fa-right-to-bracket text-sky-400"></i>
                       Join Interview
                     </h2>
 
                     <div className="space-y-2">
-                      <label className="text-sm text-slate-300">Interview Code</label>
+                      <label className="text-sm text-slate-300">
+                        Interview Code
+                      </label>
                       <div className="relative">
                         <input
                           type="text"
                           placeholder="Enter 6-digit code"
                           value={interviewCode || ""}
-                          onChange={(e) => setInterviewCode(e.target.value.toUpperCase())}
+                          onChange={(e) =>
+                            setInterviewCode(e.target.value.toUpperCase())
+                          }
                           maxLength={6}
                           className="w-full bg-slate-900/60 border border-white/10 rounded-xl px-4 py-3 text-lg font-mono tracking-wider text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                         />
@@ -332,7 +344,7 @@ export default function InterviewSetup({
                   </div>
                 )}
 
-                {/* Connect Button */}
+                {/* Connect Button - More responsive */}
                 <button
                   onClick={connectToInterview}
                   disabled={
@@ -340,46 +352,55 @@ export default function InterviewSetup({
                     (interviewState === "join" && !interviewCode) ||
                     (interviewState === "create" && !interviewCode)
                   }
-                  className="w-full mt-4 px-6 py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 transition-all duration-200 flex items-center justify-center gap-2"
+                  className="w-full mt-4 px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg sm:rounded-xl text-sm sm:text-base font-semibold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 transition-all duration-200 flex items-center justify-center gap-2"
                 >
                   {isValidatingCode ? (
                     <>
                       <i className="fa-solid fa-spinner animate-spin"></i>
-                      Validating...
+                      <span className="hidden sm:inline">Validating...</span>
+                      <span className="sm:hidden">Loading...</span>
                     </>
                   ) : (
                     <>
                       <i className="fa-solid fa-plug"></i>
-                      Connect to Interview
+                      <span className="hidden sm:inline">Connect to Interview</span>
+                      <span className="sm:hidden">Connect</span>
                     </>
                   )}
                 </button>
               </div>
 
-              {/* Features Grid - Improved responsive layout */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-slate-900/40 rounded-xl">
+              {/* Features Grid - More responsive */}
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 sm:gap-4 p-3 sm:p-4 bg-slate-900/40 rounded-lg sm:rounded-xl">
                 {[
                   { icon: "fa-code", color: "emerald", text: "Code Editor" },
                   { icon: "fa-eye", color: "sky", text: "Live Monitoring" },
                   { icon: "fa-video", color: "purple", text: "HD Video" },
-                  { icon: "fa-message", color: "pink", text: "Live Chat" }
+                  { icon: "fa-message", color: "pink", text: "Live Chat" },
                 ].map((feature, index) => (
-                  <div key={index} className="flex items-center gap-3 p-3 rounded-lg bg-slate-900/30">
-                    <i className={`fa-solid ${feature.icon} text-${feature.color}-400 text-lg`}></i>
-                    <span className="text-slate-200">{feature.text}</span>
+                  <div
+                    key={index}
+                    className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-md sm:rounded-lg bg-slate-900/30"
+                  >
+                    <i
+                      className={`fa-solid ${feature.icon} text-${feature.color}-400 text-base sm:text-lg`}
+                    ></i>
+                    <span className="text-slate-200 text-xs sm:text-sm">
+                      {feature.text}
+                    </span>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Right Column - Video Preview */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+            {/* Right Column - Video Preview - More responsive */}
+            <div className="space-y-3 sm:space-y-4">
+              <h3 className="text-base sm:text-lg font-semibold text-white flex items-center gap-2">
                 <i className="fa-solid fa-camera text-purple-400"></i>
                 Camera Preview
               </h3>
 
-              <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-slate-900/60">
+              <div className="relative rounded-lg sm:rounded-2xl overflow-hidden border border-white/10 bg-slate-900/60">
                 <video
                   ref={localVideoRef}
                   autoPlay
@@ -390,7 +411,7 @@ export default function InterviewSetup({
                 <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none"></div>
               </div>
 
-              <p className="text-sm text-slate-400 flex items-center gap-2">
+              <p className="text-xs sm:text-sm text-slate-400 flex items-center gap-1.5 sm:gap-2">
                 <i className="fa-solid fa-circle-info text-blue-400"></i>
                 Please ensure your camera and microphone are working properly
               </p>
