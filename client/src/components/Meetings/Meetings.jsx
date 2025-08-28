@@ -8,7 +8,7 @@ import { getPermissions } from "./utils/mediaUtils";
 
 export default function Meetings() {
   const { isAuthenticated, isLoading } = useAuth();
-  
+
   const socketRef = useRef();
   const socketIdRef = useRef();
   const localVideoRef = useRef();
@@ -31,7 +31,7 @@ export default function Meetings() {
 
   // Check authentication on component mount
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    if (!isAuthenticated) {
       toast.error("Please log in to access meetings");
       return;
     }
@@ -40,140 +40,151 @@ export default function Meetings() {
   // Restore meeting state on component mount
   useEffect(() => {
     if (isAuthenticated) {
-      const savedMeetingCode = sessionStorage.getItem('currentMeetingCode');
-      const savedMeetingState = sessionStorage.getItem('currentMeetingState');
-      const inMeeting = sessionStorage.getItem('inMeeting') === 'true';
-      
+      const savedMeetingCode = sessionStorage.getItem("currentMeetingCode");
+      const savedMeetingState = sessionStorage.getItem("currentMeetingState");
+      const inMeeting = sessionStorage.getItem("inMeeting") === "true";
+
       if (savedMeetingCode && inMeeting) {
         setMeetingCode(savedMeetingCode);
-        setMeetingState(savedMeetingState || 'join');
+        setMeetingState(savedMeetingState || "join");
         setVideo(true);
         setAudio(true);
         setAskForMeetingCode(false);
-        
+
         // Reconnect to socket
         connectToSocketServer({
           socketRef,
           socketIdRef,
           meetingCode: savedMeetingCode,
           setVideos,
-          videoRef
+          videoRef,
         });
       }
-      
+
       getPermissions({
         setVideoAvailable,
         setAudioAvailable,
         setScreenAvailable,
         setCameraStream,
-        localVideoRef
+        localVideoRef,
       });
     }
   }, [isAuthenticated]);
 
   // Save meeting state when entering a meeting
   const handleJoinMeeting = () => {
-    setVideo(true); 
-    setAudio(true); 
+    setVideo(true);
+    setAudio(true);
     setAskForMeetingCode(false);
-    
+
     // Save to sessionStorage
-    sessionStorage.setItem('currentMeetingCode', meetingCode);
-    sessionStorage.setItem('currentMeetingState', meetingState);
-    sessionStorage.setItem('inMeeting', 'true');
-    
+    sessionStorage.setItem("currentMeetingCode", meetingCode);
+    sessionStorage.setItem("currentMeetingState", meetingState);
+    sessionStorage.setItem("inMeeting", "true");
+
     connectToSocketServer({
       socketRef,
       socketIdRef,
       meetingCode,
       setVideos,
-      videoRef
+      videoRef,
     });
   };
 
   // Clear meeting state when leaving
   const handleLeaveMeeting = () => {
-    sessionStorage.removeItem('currentMeetingCode');
-    sessionStorage.removeItem('currentMeetingState');
-    sessionStorage.removeItem('inMeeting');
+    sessionStorage.removeItem("currentMeetingCode");
+    sessionStorage.removeItem("currentMeetingState");
+    sessionStorage.removeItem("inMeeting");
     setAskForMeetingCode(true);
   };
 
   // Show loading state
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Loading...</div>
-      </div>
-    );
-  }
-
-  // Show login message if not authenticated
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl mb-4">Authentication Required</h1>
-          <p>Please log in to access meetings.</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen w-full relative bg-black">
-      {/* Same background as Layout */}
-      <div
-        className="fixed inset-0 z-0"
-        style={{
-          background: `
+      <div className="min-h-screen w-full relative bg-black">
+        {/* Same background as your app */}
+        <div
+          className="fixed inset-0 z-0"
+          style={{
+            background: `
             radial-gradient(ellipse 120% 80% at 70% 20%, rgba(255, 20, 147, 0.15), transparent 50%),
             radial-gradient(ellipse 100% 60% at 30% 10%, rgba(0, 255, 255, 0.12), transparent 60%),
             radial-gradient(ellipse 90% 70% at 50% 0%, rgba(138, 43, 226, 0.18), transparent 65%),
             radial-gradient(ellipse 110% 50% at 80% 30%, rgba(255, 215, 0, 0.08), transparent 40%),
             #000000
           `,
-        }}
-      />
+          }}
+        />
 
-      {/* Content Layer */}
-      <div className="relative z-10 min-h-screen">
-        {askForMeetingCode ? (
-          <MeetingSetup
-            meetingCode={meetingCode}
-            setMeetingCode={setMeetingCode}
-            meetingState={meetingState}
-            setMeetingState={setMeetingState}
-            isValidatingCode={isValidatingCode}
-            setIsValidatingCode={setIsValidatingCode}
-            isCreatingMeeting={isCreatingMeeting}
-            setIsCreatingMeeting={setIsCreatingMeeting}
-            localVideoRef={localVideoRef}
-            onJoinMeeting={handleJoinMeeting}
-          />
-        ) : (
-          <MeetingRoom
-            meetingCode={meetingCode}
-            localVideoRef={localVideoRef}
-            videos={videos}
-            video={video}
-            setVideo={setVideo}
-            audio={audio}
-            setAudio={setAudio}
-            screen={screen}
-            setScreen={setScreen}
-            screenStream={screenStream}
-            setScreenStream={setScreenStream}
-            cameraStream={cameraStream}
-            setCameraStream={setCameraStream}
-            videoAvailable={videoAvailable}
-            audioAvailable={audioAvailable}
-            socketRef={socketRef}
-            socketIdRef={socketIdRef}
-            onLeaveMeeting={handleLeaveMeeting}
-          />
-        )}
+        {/* Simple loading */}
+        <div className="relative z-10 min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-15 h-15 border-5 border-gray-600 border-t-blue-500 rounded-full animate-spin mx-auto mb-4"></div>
+            <div className="text-white text-lg">
+              Loading Meetings... This may take a few seconds.
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
+  else {
+    return (
+      <div className="min-h-screen w-full relative bg-black">
+        {/* Same background as Layout */}
+        <div
+          className="fixed inset-0 z-0"
+          style={{
+            background: `
+            radial-gradient(ellipse 120% 80% at 70% 20%, rgba(255, 20, 147, 0.15), transparent 50%),
+            radial-gradient(ellipse 100% 60% at 30% 10%, rgba(0, 255, 255, 0.12), transparent 60%),
+            radial-gradient(ellipse 90% 70% at 50% 0%, rgba(138, 43, 226, 0.18), transparent 65%),
+            radial-gradient(ellipse 110% 50% at 80% 30%, rgba(255, 215, 0, 0.08), transparent 40%),
+            #000000
+          `,
+          }}
+        />
+
+        {/* Content Layer */}
+        <div className="relative z-10 min-h-screen">
+          {askForMeetingCode ? (
+            <MeetingSetup
+              meetingCode={meetingCode}
+              setMeetingCode={setMeetingCode}
+              meetingState={meetingState}
+              setMeetingState={setMeetingState}
+              isValidatingCode={isValidatingCode}
+              setIsValidatingCode={setIsValidatingCode}
+              isCreatingMeeting={isCreatingMeeting}
+              setIsCreatingMeeting={setIsCreatingMeeting}
+              localVideoRef={localVideoRef}
+              onJoinMeeting={handleJoinMeeting}
+            />
+          ) : (
+            <MeetingRoom
+              meetingCode={meetingCode}
+              localVideoRef={localVideoRef}
+              videos={videos}
+              video={video}
+              setVideo={setVideo}
+              audio={audio}
+              setAudio={setAudio}
+              screen={screen}
+              setScreen={setScreen}
+              screenStream={screenStream}
+              setScreenStream={setScreenStream}
+              cameraStream={cameraStream}
+              setCameraStream={setCameraStream}
+              videoAvailable={videoAvailable}
+              audioAvailable={audioAvailable}
+              socketRef={socketRef}
+              socketIdRef={socketIdRef}
+              onLeaveMeeting={handleLeaveMeeting}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
 }
