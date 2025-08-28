@@ -87,7 +87,7 @@ function Navbar() {
                 <img
                   src="/logo.png"
                   alt="HireSafe Logo"
-                  className="h-50 w-50 object-contain"
+                  className="w-50 object-contain"
                 />
               </div>
             </Link>

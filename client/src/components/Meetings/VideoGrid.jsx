@@ -1,174 +1,198 @@
 import React, { useMemo } from "react";
 
-/**
- * props:
- * - localVideoRef: React.RefObject<HTMLVideoElement>
- * - videos: [{ socketId, stream, isMuted?, isCameraOff? }]
- * - screen: boolean
- * - screenStream: MediaStream | null
- */
 export default function VideoGrid({ localVideoRef, videos = [], screen, screenStream }) {
-  const remoteVideos = videos;
+  
+  console.log("🔍 VideoGrid:", {
+    screen,
+    screenStream: !!screenStream,
+    videos: videos.length,
+    screenShareVideos: videos.filter(v => v.isScreenShare).length
+  });
 
-  const screenTile = useMemo(() => {
-    if (!screen) return null;
+  // Find who's screen sharing
+  const screenShareVideo = videos.find(v => v.isScreenShare === true);
+  const isAnyoneScreenSharing = screen || screenShareVideo;
 
-    // While stream is being acquired, show a friendly initializing tile
-    if (!screenStream) {
-      return (
-        <InitTile title="Starting screen share…" />
-      );
+  // Main presenter
+  const mainPresenter = useMemo(() => {
+    if (screenShareVideo) {
+      return {
+        title: `${shortId(screenShareVideo.socketId)} is presenting`,
+        stream: screenShareVideo.stream,
+        socketId: screenShareVideo.socketId
+      };
+    } else if (screen && screenStream) {
+      return {
+        title: "You are presenting",
+        stream: screenStream,
+        socketId: null
+      };
     }
+    return null;
+  }, [screen, screenStream, screenShareVideo]);
 
-    return (
-      <VideoTile
-        key="__screen__"
-        title="Your screen"
-        stream={screenStream}
-        highlight
-      />
-    );
-  }, [screen, screenStream]);
+  // Camera feeds - ALL non-screen-share videos + YOUR CAMERA ALWAYS
+  const cameraFeeds = useMemo(() => {
+    const feeds = [];
+    
+    // ALWAYS ADD YOUR CAMERA - even when screen sharing
+    feeds.push({
+      title: "You",
+      attachRef: localVideoRef,
+      muted: true,
+      socketId: "local"
+    });
 
-  // --- Screen share layout: big screen + thumbnail strip
-  if (screenTile) {
+    // Other cameras (NOT screen shares)
+    videos.forEach(v => {
+      if (!v.isScreenShare) {
+        feeds.push({
+          title: shortId(v.socketId),
+          stream: v.stream,
+          isMuted: v.isMuted,
+          isCameraOff: v.isCameraOff,
+          socketId: v.socketId
+        });
+      }
+    });
+
+    return feeds;
+  }, [localVideoRef, videos]);
+
+  // SCREEN SHARE LAYOUT
+  if (isAnyoneScreenSharing && mainPresenter) {
     return (
-      <div className="w-full space-y-4">
-        {/* Big presenter tile */}
-        <div className="rounded-2xl overflow-hidden border border-white/10 bg-slate-900/60">
-          {screenTile}
+      <div className="w-full h-full flex flex-col gap-4 p-4">
+        {/* MAIN SCREEN AREA */}
+        <div className="flex-1 rounded-2xl overflow-hidden border border-white/10 bg-black relative">
+          <video
+            autoPlay
+            playsInline
+            muted={false}
+            ref={(ref) => {
+              if (ref && mainPresenter.stream) {
+                ref.srcObject = mainPresenter.stream;
+              }
+            }}
+            className="w-full h-full object-contain bg-black"
+          />
+          
+          <div className="absolute top-4 left-4">
+            <span className="px-3 py-1 rounded-lg bg-blue-600/90 text-white text-sm">
+              <i className="fa-solid fa-display mr-2"></i>
+              {mainPresenter.title}
+            </span>
+          </div>
         </div>
 
-        {/* Thumbnails strip (you + others) */}
-        <div className="w-full">
-          <div
-            className="
-              flex items-stretch justify-center gap-3
-              overflow-x-auto px-1 py-1
-              [scrollbar-width:none] [-ms-overflow-style:none]
-            "
-            style={{ scrollbarWidth: "none" }}
-          >
-            {/* Local */}
-            <StripItem>
-              <VideoTile title="You" attachRef={localVideoRef} muted />
-            </StripItem>
-
-            {/* Remotes */}
-            {remoteVideos.map((v) => (
-              <StripItem key={v.socketId}>
-                <VideoTile
-                  title={shortId(v.socketId)}
-                  stream={v.stream}
-                  isMuted={v.isMuted}
-                  isCameraOff={v.isCameraOff}
+        {/* CAMERA THUMBNAILS - INCLUDING YOUR CAMERA */}
+        <div className="h-36 flex gap-3 overflow-x-auto">
+          {cameraFeeds.map((feed, index) => (
+            <div key={feed.socketId || index} className="flex-shrink-0">
+              <div className="relative w-64 h-full rounded-xl overflow-hidden border border-white/10 bg-slate-900/60">
+                <video
+                  autoPlay
+                  playsInline
+                  muted={feed.muted}
+                  ref={(ref) => {
+                    if (feed.attachRef && ref) {
+                      feed.attachRef.current = ref;
+                      // FORCE camera stream for your feed
+                      if (feed.socketId === "local" && window.cameraStreamBackup) {
+                        ref.srcObject = window.cameraStreamBackup;
+                      }
+                    }
+                    if (ref && feed.stream) {
+                      ref.srcObject = feed.stream;
+                    }
+                  }}
+                  className="w-full h-full object-contain bg-black"
                 />
-              </StripItem>
-            ))}
-          </div>
+                
+                <div className="absolute bottom-2 left-2 px-2 py-1 rounded bg-black/70 text-white text-xs">
+                  {feed.title}
+                </div>
+                
+                <div className="absolute bottom-2 right-2 flex gap-1">
+                  {feed.isMuted && (
+                    <span className="w-6 h-6 rounded-full bg-red-600/80 flex items-center justify-center">
+                      <i className="fa-solid fa-microphone-slash text-xs text-white"></i>
+                    </span>
+                  )}
+                  {feed.isCameraOff && (
+                    <span className="w-6 h-6 rounded-full bg-red-600/80 flex items-center justify-center">
+                      <i className="fa-solid fa-video-slash text-xs text-white"></i>
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     );
   }
 
-  // --- Normal layout: centered, balanced tiles
-  return (
-    <div className="flex flex-wrap justify-center gap-4">
-      {/* Local */}
-      <TileColumn>
-        <VideoTile key="__local__" title="You" attachRef={localVideoRef} muted />
-      </TileColumn>
+  // NORMAL CAMERA LAYOUT
+  const getGridClass = (count) => {
+    if (count === 1) return "grid-cols-1 place-items-center"; // Center single video
+    if (count === 2) return "grid-cols-1 lg:grid-cols-2";
+    if (count <= 4) return "grid-cols-1 sm:grid-cols-2";
+    if (count <= 6) return "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
+    return "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+  };
 
-      {/* Remotes */}
-      {remoteVideos.map((v) => (
-        <TileColumn key={v.socketId}>
-          <VideoTile
-            title={shortId(v.socketId)}
-            stream={v.stream}
-            isMuted={v.isMuted}
-            isCameraOff={v.isCameraOff}
-          />
-        </TileColumn>
-      ))}
+  return (
+    <div className="w-full h-full p-4">
+      <div className={`grid ${getGridClass(cameraFeeds.length)} gap-4 h-full`}>
+        {cameraFeeds.map((feed, index) => (
+          <div 
+            key={feed.socketId || index} 
+            className={`relative rounded-2xl overflow-hidden border border-white/10 bg-slate-900/60 ${
+              cameraFeeds.length === 1
+                ? "w-[900px] h-[600px] max-w-5xl" // Larger: 900px × 600px
+                : "aspect-video" // Normal responsive for multiple videos
+            }`}
+          >
+            <video
+              autoPlay
+              playsInline
+              muted={feed.muted}
+              ref={(ref) => {
+                if (feed.attachRef && ref) {
+                  feed.attachRef.current = ref;
+                }
+                if (ref && feed.stream) {
+                  ref.srcObject = feed.stream;
+                }
+              }}
+              className="w-full h-full object-contain"
+            />
+            
+            <div className="absolute bottom-3 left-3 px-3 py-1 rounded-lg bg-black/70 text-white text-sm">
+              {feed.title}
+            </div>
+            
+            <div className="absolute bottom-3 right-3 flex gap-2">
+              {feed.isMuted && (
+                <span className="w-7 h-7 rounded-full bg-red-600/80 flex items-center justify-center">
+                  <i className="fa-solid fa-microphone-slash text-xs text-white"></i>
+                </span>
+              )}
+              {feed.isCameraOff && (
+                <span className="w-7 h-7 rounded-full bg-red-600/80 flex items-center justify-center">
+                  <i className="fa-solid fa-video-slash text-xs text-white"></i>
+                </span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
-
-/* ---------- helpers ---------- */
 
 function shortId(id) {
   if (!id) return "Guest";
   return `User ${id.slice(0, 4).toUpperCase()}`;
-}
-
-/** Column wrapper that keeps tiles equal sized & centered */
-function TileColumn({ children }) {
-  return (
-    <div className="flex-1 min-w-[280px] max-w-[520px]">
-      {children}
-    </div>
-  );
-}
-
-/** Thumbnail wrapper for the strip under screen share */
-function StripItem({ children }) {
-  return (
-    <div className="min-w-[220px] max-w-[320px] w-full">
-      {children}
-    </div>
-  );
-}
-
-/** “Initializing share” tile */
-function InitTile({ title }) {
-  return (
-    <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-slate-900/60 shadow-xl">
-      <div className="w-full aspect-video flex items-center justify-center text-slate-200">
-        <i className="fa-solid fa-spinner animate-spin mr-2"></i>
-        {title}
-      </div>
-    </div>
-  );
-}
-
-/** Single video tile with name badge & status badges */
-function VideoTile({ title, stream, attachRef, muted, isMuted, isCameraOff, highlight }) {
-  return (
-    <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-slate-900/60 shadow-xl">
-      <video
-        ref={(ref) => {
-          if (attachRef && ref) attachRef.current = ref;
-          if (ref && stream) ref.srcObject = stream;
-        }}
-        autoPlay
-        playsInline
-        muted={muted}
-        className={`w-full aspect-video object-cover ${isCameraOff ? "opacity-40" : ""}`}
-      />
-      {/* soft glow */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_40%_at_60%_-10%,rgba(124,77,255,0.18),transparent_60%)]" />
-      {/* name label */}
-      <div className="absolute left-3 bottom-3 px-3 py-1 rounded-lg bg-black/50 backdrop-blur text-white text-xs sm:text-sm">
-        {title}
-        {highlight && (
-          <span className="ml-2 inline-flex items-center gap-1 text-amber-300">
-            <i className="fa-solid fa-star text-[10px]"></i> presenting
-          </span>
-        )}
-      </div>
-      {/* status badges */}
-      <div className="absolute right-3 bottom-3 flex items-center gap-2">
-        {isMuted && (
-          <span className="h-7 w-7 rounded-full bg-black/55 flex items-center justify-center text-white">
-            <i className="fa-solid fa-microphone-slash text-xs"></i>
-          </span>
-        )}
-        {isCameraOff && (
-          <span className="h-7 w-7 rounded-full bg-black/55 flex items-center justify-center text-white">
-          <i className="fa-solid fa-video-slash text-xs"></i>
-          </span>
-        )}
-      </div>
-    </div>
-  );
 }

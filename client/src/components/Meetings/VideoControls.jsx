@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
-import { getUserMedia, getDisplayMedia, initializeAudioContext } from "./utils/mediaUtils";
+import { getUserMedia, initializeAudioContext } from "./utils/mediaUtils";
+import { connections } from "./utils/socketUtils";
 
 export default function VideoControls({
   video, setVideo,
@@ -13,7 +14,6 @@ export default function VideoControls({
   localVideoRef
 }) {
 
-  // Make sure camera/mic attach to local video when toggled
   useEffect(() => {
     if (video !== undefined && audio !== undefined) {
       getUserMedia({
@@ -32,80 +32,126 @@ export default function VideoControls({
     }
   }, [audio, video]);
 
-  // Keep screen stream in sync when 'screen' flag changes
-  useEffect(() => {
-    if (screen === undefined) return;
-
-    // When screen is turned on via state (e.g. restored), acquire if missing
-    if (screen && !screenStream) {
-      getDisplayMedia({
-        screen,
-        setScreen,
-        screenStream,
-        setScreenStream,
-        cameraStream,
-        socketRef,
-        socketIdRef,
-        localVideoRef
-      });
-    }
-
-    // When turning screen off via state, ensure tracks stop
-    if (!screen && screenStream) {
-      try {
-        screenStream.getTracks().forEach(t => t.stop());
-      } catch {}
-      setScreenStream(null);
-    }
-  }, [screen]);
-
   const toggleVideo  = () => { initializeAudioContext(); setVideo(!video); };
   const toggleAudio  = () => { initializeAudioContext(); setAudio(!audio); };
 
-  // Robust screen share toggler with proper cleanup and error fallback
+  // FIXED: Screen share WITHOUT killing camera
   const handleScreen = async () => {
     initializeAudioContext();
 
-    // Turning ON
-    if (!screen) {
+    // Turning OFF screen share
+    if (screen) {
       try {
-        // Optimistically set state so UI shows “initializing…”
-        setScreen(true);
-
-        // Acquire display media via your util (handles socket signaling)
-        await getDisplayMedia({
-          screen: true,
-          setScreen,
-          screenStream,
-          setScreenStream,
-          cameraStream,
-          socketRef,
-          socketIdRef,
-          localVideoRef
-        });
-
-        // If util did not set a stream for some reason, revert
-        // (some browsers require user gesture & prompt could be dismissed)
-        setTimeout(() => {
-          if (!screenStream && !localVideoRef?.current?.srcObject) {
-            setScreen(false);
-          }
-        }, 300);
-      } catch (err) {
-        console.error("Screen share failed:", err);
+        if (screenStream) {
+          screenStream.getTracks().forEach(t => t.stop());
+        }
+        setScreenStream(null);
         setScreen(false);
+        
+        // Notify others
+        if (socketRef.current) {
+          socketRef.current.emit("screen-share-stopped");
+        }
+        
+        // Switch back to camera - USE BACKUP STREAM
+        if (window.cameraStreamBackup) {
+          window.localStream = window.cameraStreamBackup;
+          updatePeerConnections(window.cameraStreamBackup);
+          
+          // Update local preview back to camera
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = window.cameraStreamBackup;
+          }
+        }
+      } catch (err) {
+        console.error("Error stopping screen share:", err);
       }
       return;
     }
 
-    // Turning OFF
+    // Turning ON screen share
     try {
-      if (screenStream) {
-        screenStream.getTracks().forEach(t => t.stop());
+      const stream = await navigator.mediaDevices.getDisplayMedia({ 
+        video: true, 
+        audio: true 
+      });
+      
+      console.log("🎯 Screen share started - keeping camera alive");
+      
+      setScreenStream(stream);
+      setScreen(true);
+      
+      // Notify others FIRST
+      if (socketRef.current) {
+        socketRef.current.emit("screen-share-started");
       }
-    } catch {}
-    setScreenStream(null);
-    setScreen(false);
+      
+      // CRITICAL FIX: Send screen stream to peers but keep camera reference
+      window.localStream = stream;
+      updatePeerConnections(stream);
+
+      // KEEP showing camera in local preview (don't switch to screen)
+      // The screen will be shown in the main area by VideoGrid logic
+      
+      // Handle browser stop
+      stream.getVideoTracks()[0].onended = () => {
+        setScreen(false);
+        setScreenStream(null);
+        
+        if (socketRef.current) {
+          socketRef.current.emit("screen-share-stopped");
+        }
+        
+        // Switch back to camera
+        if (window.cameraStreamBackup) {
+          window.localStream = window.cameraStreamBackup;
+          updatePeerConnections(window.cameraStreamBackup);
+        }
+      };
+        
+    } catch (err) {
+      console.error("Screen share failed:", err);
+      setScreen(false);
+      setScreenStream(null);
+    }
+  };
+
+  // SIMPLE peer updates
+  const updatePeerConnections = (streamToSend) => {
+    console.log(`🔄 Updating ${Object.keys(connections).length} peers`);
+    
+    for (let id in connections) {
+      if (id === socketIdRef.current) continue;
+
+      try {
+        // Remove old tracks
+        const senders = connections[id].getSenders();
+        senders.forEach(sender => {
+          if (sender.track) {
+            connections[id].removeTrack(sender);
+          }
+        });
+
+        // Add new tracks
+        if (streamToSend && streamToSend.getTracks) {
+          streamToSend.getTracks().forEach(track => {
+            connections[id].addTrack(track, streamToSend);
+          });
+
+          connections[id].createOffer().then((description) => {
+            connections[id].setLocalDescription(description).then(() => {
+              socketRef.current.emit(
+                "signal",
+                id,
+                JSON.stringify({ sdp: connections[id].localDescription })
+              );
+            });
+          });
+        }
+      } catch (error) {
+        console.error(`Error updating peer ${id}:`, error);
+      }
+    }
   };
 
   const Btn = ({ active, onClick, icon, label, danger }) => (

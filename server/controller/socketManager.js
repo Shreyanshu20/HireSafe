@@ -186,6 +186,41 @@ export const connectToSocket = (server) => {
       handleInterviewDisconnect(socket);
     });
 
+    // =================== SCREEN SHARING EVENTS ===================
+    socket.on('screen-share-started', () => {
+      console.log(`User ${socket.id} started screen sharing`);
+      
+      // Find meeting room
+      let roomCode = null;
+      for (const [room, clients] of Object.entries(meetingConnections)) {
+        if (clients.includes(socket.id)) {
+          roomCode = room;
+          break;
+        }
+      }
+      
+      if (roomCode) {
+        socket.to(`meeting-${roomCode}`).emit('screen-share-started', socket.id);
+      }
+    });
+
+    socket.on('screen-share-stopped', () => {
+      console.log(`User ${socket.id} stopped screen sharing`);
+      
+      // Find meeting room
+      let roomCode = null;
+      for (const [room, clients] of Object.entries(meetingConnections)) {
+        if (clients.includes(socket.id)) {
+          roomCode = room;
+          break;
+        }
+      }
+      
+      if (roomCode) {
+        socket.to(`meeting-${roomCode}`).emit('screen-share-stopped', socket.id);
+      }
+    });
+
     // =================== COMMON DISCONNECT HANDLER ===================
     socket.on('disconnect', () => {
       console.log(`User ${socket.id} disconnected`);

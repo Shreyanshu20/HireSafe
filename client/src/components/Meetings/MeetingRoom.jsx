@@ -61,13 +61,9 @@ export default function MeetingRoom({
   };
 
   return (
-    <div className="space-y-4">
-      {/* Top bar */}
-      <div className="
-        sticky/* keeps under your sticky navbar */
-        bg-slate-900/70 backdrop-blur border border-white/10
-        rounded-xl px-4 py-3 flex items-center justify-between
-      ">
+    <div className="h-screen flex flex-col">
+      {/* Top bar - fixed height */}
+      <div className="flex-shrink-0 bg-slate-900/70 backdrop-blur border border-white/10 rounded-xl mx-4 mt-4 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-slate-800 text-slate-200">
             <i className="fa-solid fa-hashtag text-sky-400"></i>
@@ -75,7 +71,7 @@ export default function MeetingRoom({
           </span>
           <button
             onClick={copyCode}
-            className="px-3 py-1 rounded-lg border border-white/15 text-slate-200 hover:bg-slate-800"
+            className="px-3 py-1 rounded-lg border border-white/15 text-slate-200 hover:bg-slate-800 transition"
             title="Copy code"
           >
             <i className="fa-solid fa-copy"></i>
@@ -88,15 +84,17 @@ export default function MeetingRoom({
         </div>
       </div>
 
-      {/* Video area */}
-      <VideoGrid
-        localVideoRef={localVideoRef}
-        videos={videos}
-        screen={screen}
-        screenStream={screenStream}
-      />
+      {/* Video area - takes remaining space */}
+      <div className="flex-1 min-h-0 px-4 pb-20"> {/* pb-20 for controls space */}
+        <VideoGrid
+          localVideoRef={localVideoRef}
+          videos={videos}
+          screen={screen}
+          screenStream={screenStream}
+        />
+      </div>
 
-      {/* Floating controls */}
+      {/* Floating controls - positioned absolutely */}
       <VideoControls
         video={video} setVideo={setVideo}
         audio={audio} setAudio={setAudio}

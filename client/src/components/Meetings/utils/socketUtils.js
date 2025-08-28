@@ -3,17 +3,13 @@ import { toast } from "react-toastify";
 
 const server_url = import.meta.env.VITE_BACKEND_URL || "http://localhost:9000";
 
-// Enhanced peer configuration for mobile devices
 const peerConfigConnections = {
   iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
-    { urls: "stun:stun2.l.google.com:19302" }
-  ],
-  iceCandidatePoolSize: 10
+    { urls: "stun:stun.l.google.com:19302" }
+  ]
 };
 
-export const connections = {}; // Export connections
+export const connections = {};
 
 export const connectToSocketServer = ({
   socketRef,
@@ -28,9 +24,9 @@ export const connectToSocketServer = ({
   });
 
   socketRef.current.on("connect", () => {
-    console.log("Connected with ID:", socketRef.current.id);
+    console.log("Connected:", socketRef.current.id);
     socketRef.current.emit("join-call", meetingCode);
-    toast.success("Connected to the meeting successfully!");
+    toast.success("Connected to meeting!");
     socketIdRef.current = socketRef.current.id;
   });
 
@@ -48,6 +44,38 @@ export const connectToSocketServer = ({
 
   socketRef.current.on("user-joined", (id, clients) => {
     handleUserJoined(id, clients, socketRef, socketIdRef, setVideos, videoRef);
+  });
+
+  // SIMPLE screen share handling - JUST SET FLAGS
+  socketRef.current.on("screen-share-started", (fromId) => {
+    console.log(`🖥️ ${fromId} started screen sharing`);
+    window.screenShareUsers = window.screenShareUsers || new Set();
+    window.screenShareUsers.add(fromId);
+    
+    // UPDATE existing videos to mark as screen share
+    setVideos((videos) => 
+      videos.map(video => 
+        video.socketId === fromId 
+          ? { ...video, isScreenShare: true }
+          : video
+      )
+    );
+  });
+
+  socketRef.current.on("screen-share-stopped", (fromId) => {
+    console.log(`📹 ${fromId} stopped screen sharing`);
+    if (window.screenShareUsers) {
+      window.screenShareUsers.delete(fromId);
+    }
+    
+    // UPDATE existing videos to mark as camera
+    setVideos((videos) => 
+      videos.map(video => 
+        video.socketId === fromId 
+          ? { ...video, isScreenShare: false }
+          : video
+      )
+    );
   });
 };
 
@@ -77,11 +105,11 @@ const gotMessageFromServer = async (fromId, message, socketRef, socketIdRef) => 
       try {
         await connections[fromId].addIceCandidate(new RTCIceCandidate(signal.ice));
       } catch (error) {
-        console.warn("ICE candidate error (normal):", error);
+        console.warn("ICE error:", error);
       }
     }
   } catch (error) {
-    console.error("Error processing signal:", error);
+    console.error("Signal error:", error);
   }
 };
 
@@ -101,34 +129,37 @@ const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, 
       }
     };
 
-    // Use ontrack for modern browsers
+    // SIMPLE stream handling - NO COMPLEX DETECTION
     connections[socketListId].ontrack = (event) => {
       const [stream] = event.streams;
       
+      // SIMPLE detection - just check if this user is screen sharing
+      const isScreenShare = window.screenShareUsers?.has(socketListId) || false;
+      
+      console.log(`📺 Stream from ${socketListId}:`, {
+        isScreenShare,
+        tracks: stream.getTracks().length
+      });
+      
       setVideos((videos) => {
-        const existingVideo = videos.find(video => video.socketId === socketListId);
+        // Replace any existing stream from this user
+        const filtered = videos.filter(v => v.socketId !== socketListId);
         
-        if (existingVideo) {
-          const updatedVideos = videos.map(video =>
-            video.socketId === socketListId ? { ...video, stream } : video
-          );
-          videoRef.current = updatedVideos;
-          return updatedVideos;
-        } else {
-          const newVideo = {
-            socketId: socketListId,
-            stream,
-            autoPlay: true,
-            playsinline: true,
-          };
-          const updatedVideos = [...videos, newVideo];
-          videoRef.current = updatedVideos;
-          return updatedVideos;
-        }
+        const newVideo = {
+          socketId: socketListId,
+          stream,
+          isScreenShare,
+          autoPlay: true,
+          playsinline: true,
+          isMuted: !stream.getAudioTracks().some(track => track.enabled),
+          isCameraOff: !stream.getVideoTracks().some(track => track.enabled),
+        };
+        
+        return [...filtered, newVideo];
       });
     };
 
-    // Add local stream tracks
+    // Add local stream
     if (window.localStream && window.localStream.getTracks) {
       for (const track of window.localStream.getTracks()) {
         connections[socketListId].addTrack(track, window.localStream);
@@ -136,7 +167,7 @@ const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, 
     }
   }
 
-  // Create offers if this is the current user
+  // Create offers
   if (id === socketIdRef.current) {
     for (const id2 in connections) {
       if (id2 === socketIdRef.current) continue;
@@ -151,7 +182,7 @@ const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, 
           JSON.stringify({ sdp: connections[id2].localDescription })
         );
       } catch (error) {
-        console.error("Error creating offer:", error);
+        console.error("Offer error:", error);
       }
     }
   }
