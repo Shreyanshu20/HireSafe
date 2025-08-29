@@ -69,39 +69,39 @@ export const connectToSocketServer = ({
     );
   });
 
-  // FIXED: Handle camera toggle events - update video object immediately
+  // ✅ FIXED: Handle camera toggle events - ONLY UPDATE CAMERA STATE
   socketRef.current.on("user-camera-toggled", (userId, isEnabled) => {
     console.log(`📹 User ${userId} ${isEnabled ? 'enabled' : 'disabled'} camera`);
     
-    // Update global state
+    // Update global state - ONLY VIDEO
     if (!window.meetingUserStates) window.meetingUserStates = {};
     if (!window.meetingUserStates[userId]) window.meetingUserStates[userId] = {};
     window.meetingUserStates[userId].video = isEnabled;
     
-    // IMMEDIATELY update video state for UI
+    // ✅ ONLY update camera state, PRESERVE audio state
     setVideos((videos) => 
       videos.map(video => 
         video.socketId === userId 
-          ? { ...video, isCameraOff: !isEnabled }
+          ? { ...video, isCameraOff: !isEnabled } // ONLY change camera
           : video
       )
     );
   });
 
-  // FIXED: Handle microphone toggle events - update video object immediately
+  // ✅ FIXED: Handle microphone toggle events - ONLY UPDATE AUDIO STATE
   socketRef.current.on("user-microphone-toggled", (userId, isEnabled) => {
     console.log(`🎤 User ${userId} ${isEnabled ? 'enabled' : 'disabled'} microphone`);
     
-    // Update global state
+    // Update global state - ONLY AUDIO
     if (!window.meetingUserStates) window.meetingUserStates = {};
     if (!window.meetingUserStates[userId]) window.meetingUserStates[userId] = {};
     window.meetingUserStates[userId].audio = isEnabled;
     
-    // IMMEDIATELY update video state for UI
+    // ✅ ONLY update audio state, PRESERVE camera state
     setVideos((videos) => 
       videos.map(video => 
         video.socketId === userId 
-          ? { ...video, isMuted: !isEnabled }
+          ? { ...video, isMuted: !isEnabled } // ONLY change audio
           : video
       )
     );

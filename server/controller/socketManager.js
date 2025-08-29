@@ -61,37 +61,41 @@ export const connectToSocket = (server) => {
       io.to(toId).emit('signal', socket.id, message);
     });
 
-    // NEW: Camera toggle event
+    // ✅ FIXED: Camera toggle event - DON'T affect audio state
     socket.on('toggle-camera', (isEnabled) => {
       console.log(`User ${socket.id} ${isEnabled ? 'enabled' : 'disabled'} camera`);
       
-      // Find meeting room and update state
+      // Find meeting room and update ONLY VIDEO state
       for (const [roomCode, clients] of Object.entries(meetingConnections)) {
         if (clients.includes(socket.id)) {
           if (meetingUserStates[roomCode] && meetingUserStates[roomCode][socket.id]) {
             meetingUserStates[roomCode][socket.id].video = isEnabled;
+            // ✅ DON'T TOUCH AUDIO STATE HERE
           }
           
-          // Broadcast to all other users in the room
+          // Broadcast ONLY camera state change
           socket.to(`meeting-${roomCode}`).emit('user-camera-toggled', socket.id, isEnabled);
+          console.log(`📹 Sent camera toggle to room ${roomCode}: ${socket.id} = ${isEnabled}`);
           break;
         }
       }
     });
 
-    // NEW: Microphone toggle event
+    // ✅ FIXED: Microphone toggle event - DON'T affect video state  
     socket.on('toggle-microphone', (isEnabled) => {
       console.log(`User ${socket.id} ${isEnabled ? 'enabled' : 'disabled'} microphone`);
       
-      // Find meeting room and update state
+      // Find meeting room and update ONLY AUDIO state
       for (const [roomCode, clients] of Object.entries(meetingConnections)) {
         if (clients.includes(socket.id)) {
           if (meetingUserStates[roomCode] && meetingUserStates[roomCode][socket.id]) {
             meetingUserStates[roomCode][socket.id].audio = isEnabled;
+            // ✅ DON'T TOUCH VIDEO STATE HERE
           }
           
-          // Broadcast to all other users in the room
+          // Broadcast ONLY microphone state change
           socket.to(`meeting-${roomCode}`).emit('user-microphone-toggled', socket.id, isEnabled);
+          console.log(`🎤 Sent microphone toggle to room ${roomCode}: ${socket.id} = ${isEnabled}`);
           break;
         }
       }
