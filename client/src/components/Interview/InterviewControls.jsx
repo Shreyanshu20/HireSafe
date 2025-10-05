@@ -33,46 +33,87 @@ export default function InterviewControls({
     }
   }, [audio, video]);
 
-  const handleVideo = () => {
+  const toggleVideo = () => {
     initializeAudioContext();
-    setVideo(!video);
+    const newVideoState = !video;
+    console.log(`🎥 Toggling camera: ${video} -> ${newVideoState}`);
+    
+    setVideo(newVideoState);
+    
+    // ✅ EMIT THE CORRECT EVENT THAT MEETINGS USE
+    if (socketRef.current) {
+      socketRef.current.emit("toggle-camera", newVideoState);
+    }
   };
 
-  const handleAudio = () => {
+  const toggleAudio = () => {
     initializeAudioContext();
-    setAudio(!audio);
+    const newAudioState = !audio;
+    console.log(`🎤 Toggling audio: ${audio} -> ${newAudioState}`);
+    
+    setAudio(newAudioState);
+    
+    // ✅ EMIT THE CORRECT EVENT THAT MEETINGS USE
+    if (socketRef.current) {
+      socketRef.current.emit("toggle-microphone", newAudioState);
+    }
   };
+
+  const Btn = ({ active, onClick, icon, label, danger }) => (
+    <button
+      onClick={onClick}
+      className={[
+        "h-12 w-12 rounded-full flex items-center justify-center",
+        "shadow-lg transition focus:outline-none",
+        active ? "bg-emerald-500 text-white hover:bg-emerald-600"
+               : danger ? "bg-red-600 text-white hover:bg-red-700"
+               : "bg-slate-800 text-gray-200 hover:bg-slate-700"
+      ].join(" ")}
+      title={label}
+      aria-label={label}
+    >
+      <i className={`fa-solid ${icon}`}></i>
+    </button>
+  );
 
   return (
-    <div className="mt-4">
-      <button
-        onClick={handleVideo}
-        className={`mr-2 p-2 text-white rounded ${
-          video ? "bg-blue-500" : "bg-gray-500"
-        }`}
-      >
-        {video ? "Video On" : "Video Off"}
-      </button>
-      <button
-        onClick={handleAudio}
-        className={`mr-2 p-2 text-white rounded ${
-          audio ? "bg-green-500" : "bg-gray-500"
-        }`}
-      >
-        {audio ? "Audio On" : "Audio Off"}
-      </button>
-      <button
-        onClick={onOpenChat}
-        className="mr-2 p-2 bg-purple-500 text-white rounded"
-      >
-        Chat {newMessage > 0 && `(${newMessage})`}
-      </button>
-      <button
-        onClick={onEndCall}
-        className="mr-2 p-2 bg-red-500 text-white rounded"
-      >
-        End Interview
-      </button>
+    <div className="fixed left-1/2 -translate-x-1/2 bottom-2 z-40">
+      <div className="rounded-full bg-slate-900/70 backdrop-blur border border-white/10 px-3 py-2 flex items-center gap-3">
+        <Btn 
+          active={video} 
+          onClick={toggleVideo} 
+          icon={video ? "fa-video" : "fa-video-slash"} 
+          label="Toggle camera" 
+        />
+        
+        <Btn 
+          active={audio} 
+          onClick={toggleAudio} 
+          icon={audio ? "fa-microphone" : "fa-microphone-slash"} 
+          label="Toggle microphone" 
+        />
+
+        <div className="relative">
+          <Btn 
+            active={false} 
+            onClick={onOpenChat} 
+            icon="fa-message" 
+            label="Open chat" 
+          />
+          {newMessage > 0 && (
+            <span className="absolute -top-1 -right-1 h-5 min-w-[1.25rem] px-1 rounded-full bg-rose-500 text-white text-xs flex items-center justify-center">
+              {newMessage}
+            </span>
+          )}
+        </div>
+
+        <Btn 
+          danger 
+          onClick={onEndCall} 
+          icon="fa-phone-slash" 
+          label="End interview" 
+        />
+      </div>
     </div>
   );
 }

@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 import InterviewControls from "./InterviewControls";
 import VideoGrid from "./VideoGrid";
 import ChatModal from "./ChatModal";
 import CodeEditor from "./CodeEditor";
-import InterviewDashboard from "./InterviewDashboard"; // Add this import
+import InterviewDashboard from "./InterviewDashboard";
 import { handleEndCall } from "./utils/mediaUtils";
 import { sendCodeChange, sendInterviewMessage, sendOutputChange } from "./utils/socketUtils";
 
@@ -34,21 +35,30 @@ export default function InterviewRoom({
   const [newMessage, setNewMessage] = useState(0);
   const [codeContent, setCodeContent] = useState(`console.log("Hello World!");`);
   const [selectedLanguage, setSelectedLanguage] = useState("javascript");
+  const [codeOutput, setCodeOutput] = useState("");
   const [userRole, setUserRole] = useState("candidate");
   
   // Refs to prevent unnecessary re-renders
   const codeChangeTimeoutRef = useRef(null);
   const lastCodeChangeRef = useRef("");
   const isUpdatingFromSocketRef = useRef(false);
+  const isUpdatingOutputFromSocketRef = useRef(false);
 
-  // Memoized handlers to prevent re-renders
+  // ✅ STYLED: Add participant count like meetings
+  const participants = useMemo(() => {
+    const remoteParticipants = videos.filter(video => 
+      video.stream && video.socketId && video.stream.getTracks().length > 0
+    ).length;
+    return 1 + remoteParticipants;
+  }, [videos]);
+
+  // Memoized handlers to prevent re-renders (keep existing functionality)
   const handleCodeChange = useCallback((data) => {
     if (data.code !== undefined && !isUpdatingFromSocketRef.current) {
       isUpdatingFromSocketRef.current = true;
       setCodeContent(data.code);
       lastCodeChangeRef.current = data.code;
       
-      // Reset flag after a short delay
       setTimeout(() => {
         isUpdatingFromSocketRef.current = false;
       }, 100);
@@ -58,6 +68,17 @@ export default function InterviewRoom({
   const handleLanguageChange = useCallback((data) => {
     if (data.language !== undefined) {
       setSelectedLanguage(data.language);
+    }
+  }, []);
+
+  const handleOutputChange = useCallback((data) => {
+    if (data.output !== undefined && !isUpdatingOutputFromSocketRef.current) {
+      isUpdatingOutputFromSocketRef.current = true;
+      setCodeOutput(data.output);
+      
+      setTimeout(() => {
+        isUpdatingOutputFromSocketRef.current = false;
+      }, 100);
     }
   }, []);
 
@@ -73,16 +94,16 @@ export default function InterviewRoom({
 
   useEffect(() => {
     if (socketRef.current) {
-      // Remove existing listeners
       socketRef.current.off("interview-chat-message");
       socketRef.current.off("malpractice-detected");
       socketRef.current.off("code-change");
       socketRef.current.off("language-change");
+      socketRef.current.off("output-change");
 
-      // Add new listeners
       socketRef.current.on("interview-chat-message", handleInterviewMessage);
       socketRef.current.on("code-change", handleCodeChange);
       socketRef.current.on("language-change", handleLanguageChange);
+      socketRef.current.on("output-change", handleOutputChange);
 
       if (userRole === "interviewer") {
         socketRef.current.on("malpractice-detected", (data) => {
@@ -108,10 +129,11 @@ export default function InterviewRoom({
         socketRef.current.off("interview-chat-message", handleInterviewMessage);
         socketRef.current.off("code-change", handleCodeChange);
         socketRef.current.off("language-change", handleLanguageChange);
+        socketRef.current.off("output-change", handleOutputChange);
         socketRef.current.off("malpractice-detected");
       }
     };
-  }, [socketRef, userRole, handleInterviewMessage, handleCodeChange, handleLanguageChange, socketIdRef]);
+  }, [socketRef, userRole, handleInterviewMessage, handleCodeChange, handleLanguageChange, handleOutputChange, socketIdRef]);
 
   useEffect(() => {
     if (interviewState === "create") {
@@ -122,7 +144,6 @@ export default function InterviewRoom({
   }, [interviewState]);
 
   const onCodeEdit = useCallback((newCode) => {
-    // Prevent loop if this update came from socket
     if (isUpdatingFromSocketRef.current || newCode === lastCodeChangeRef.current) {
       return;
     }
@@ -130,14 +151,13 @@ export default function InterviewRoom({
     setCodeContent(newCode);
     lastCodeChangeRef.current = newCode;
 
-    // Debounce code changes to prevent too many socket emissions
     if (codeChangeTimeoutRef.current) {
       clearTimeout(codeChangeTimeoutRef.current);
     }
 
     codeChangeTimeoutRef.current = setTimeout(() => {
       sendCodeChange(socketRef, newCode, selectedLanguage, interviewCode);
-    }, 500); // 500ms debounce
+    }, 500);
   }, [socketRef, selectedLanguage, interviewCode]);
 
   const onLanguageChange = useCallback((newLanguage) => {
@@ -169,17 +189,26 @@ export default function InterviewRoom({
     setMessage(e.target.value);
   }, []);
 
+  // ✅ STYLED: Add copy code functionality like meetings
+  const copyCode = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(interviewCode);
+      toast.success("Interview code copied");
+    } catch {
+      toast.info("Could not copy. Long-press to copy.");
+    }
+  }, [interviewCode]);
+
   const onEndCall = useCallback(() => {
     if (codeChangeTimeoutRef.current) {
       clearTimeout(codeChangeTimeoutRef.current);
     }
     
-    // Use the same handleEndCall as meetings
     handleEndCall({ cameraStream, screenStream: null, socketRef });
     onLeaveInterview();
-  }, [cameraStream, socketRef, onLeaveInterview]); // Add navigate to dependencies
+    toast.info("You left the interview");
+  }, [cameraStream, socketRef, onLeaveInterview]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (codeChangeTimeoutRef.current) {
@@ -189,23 +218,71 @@ export default function InterviewRoom({
   }, []);
 
   const onOutputChange = useCallback((newOutput) => {
+    if (isUpdatingOutputFromSocketRef.current) {
+      return;
+    }
+
+    setCodeOutput(newOutput);
     sendOutputChange(socketRef, newOutput, interviewCode);
   }, [socketRef, interviewCode]);
 
+  // ✅ STYLED: Memoize props like meetings to prevent re-renders
+  const videoGridProps = useMemo(() => ({
+    localVideoRef,
+    videos,
+    socketRef,
+    interviewCode,
+    isInterviewer: userRole === "interviewer",
+    onAnomalyDetected: (anomaly) => {},
+    video,
+    audio
+  }), [localVideoRef, videos, socketRef, interviewCode, userRole, video, audio]);
+
+  const interviewControlsProps = useMemo(() => ({
+    video, setVideo,
+    audio, setAudio,
+    newMessage,
+    onOpenChat: openChat,
+    onEndCall,
+    videoAvailable,
+    audioAvailable,
+    cameraStream,
+    setCameraStream,
+    socketRef,
+    socketIdRef,
+    localVideoRef
+  }), [
+    video, setVideo, audio, setAudio, newMessage, openChat, onEndCall,
+    videoAvailable, audioAvailable, cameraStream, setCameraStream,
+    socketRef, socketIdRef, localVideoRef
+  ]);
+
   return (
-    <div className="h-screen flex flex-col p-4">
-      {/* Header */}
-      <div className="mb-4 flex justify-between items-center">
-        <div>
-          <strong className="text-white">Interview Code: {interviewCode}</strong>
-          <span className="ml-4 text-sm text-gray-400">
-            Role: {userRole === "interviewer" ? "Interviewer" : "Candidate"}
+    <div className="h-screen flex flex-col">
+      {/* ✅ STYLED: Header like meetings */}
+      <div className="flex-shrink-0 bg-slate-900/70 backdrop-blur border border-white/10 rounded-xl mx-4 mt-2 mb-2 px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-slate-800 text-slate-200">
+            <i className="fa-solid fa-user-tie text-purple-400"></i>
+            <span className="font-mono tracking-wider">{interviewCode}</span>
           </span>
+          <button
+            onClick={copyCode}
+            className="px-3 py-1 rounded-lg border border-white/15 text-slate-200 hover:bg-slate-800 transition"
+            title="Copy code"
+          >
+            <i className="fa-solid fa-copy"></i>
+          </button>
+        </div>
+
+        <div className="text-slate-300 text-sm">
+          <i className="fa-solid fa-user-tie mr-2"></i>
+          Role: {userRole === "interviewer" ? "Interviewer" : "Candidate"} • {participants} {participants === 1 ? "participant" : "participants"}
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex gap-4">
+      {/* ✅ STYLED: Main Content Area */}
+      <div className="flex-1 min-h-0 flex gap-4 px-4 pb-20">
         {/* Left Column - Code Editor */}
         <div className="w-1/2">
           <CodeEditor
@@ -214,28 +291,22 @@ export default function InterviewRoom({
             language={selectedLanguage}
             onLanguageChange={onLanguageChange}
             onOutputChange={onOutputChange}
+            outputValue={codeOutput}
             height="400px"
             theme="vs-dark"
           />
         </div>
 
         {/* Right Column */}
-        <div className="w-1/2 flex flex-col gap-4">
+        <div className="w-1/2 flex flex-col gap-4 h-full">
           {/* Video Grid */}
-          <div>
-            <VideoGrid
-              localVideoRef={localVideoRef}
-              videos={videos}
-              socketRef={socketRef}
-              interviewCode={interviewCode}
-              isInterviewer={userRole === "interviewer"}
-              onAnomalyDetected={(anomaly) => {}}
-            />
+          <div className="flex-shrink-0">
+            <VideoGrid {...videoGridProps} />
           </div>
 
           {/* Anomaly Dashboard - Only for interviewers */}
           {userRole === "interviewer" && (
-            <div className="flex-1">
+            <div className="flex-1 min-h-0 max-h-96">
               <InterviewDashboard
                 anomalies={anomalies}
                 userRole={userRole}
@@ -245,27 +316,10 @@ export default function InterviewRoom({
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="mt-4">
-        <InterviewControls
-          video={video}
-          setVideo={setVideo}
-          audio={audio}
-          setAudio={setAudio}
-          newMessage={newMessage}
-          onOpenChat={openChat}
-          onEndCall={onEndCall}
-          videoAvailable={videoAvailable}
-          audioAvailable={audioAvailable}
-          cameraStream={cameraStream}
-          setCameraStream={setCameraStream}
-          socketRef={socketRef}
-          socketIdRef={socketIdRef}
-          localVideoRef={localVideoRef}
-        />
-      </div>
+      {/* ✅ STYLED: Floating Controls like meetings */}
+      <InterviewControls {...interviewControlsProps} />
 
-      {/* Chat Modal */}
+      {/* ✅ STYLED: Chat Modal - only render when needed */}
       {showModal && (
         <ChatModal
           messages={messages}

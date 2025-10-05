@@ -23,34 +23,37 @@ export const connectToInterviewSocketServer = ({
   videoRef,
   setAnomalies,
 }) => {
-  console.log("Connecting to interview server...");
-  
-  socketRef.current = io.connect(server_url, {
+  console.log("🔗 Connecting to interview socket server...");
+
+  const socket = io(server_url, {
     withCredentials: true,
     transports: ["websocket", "polling"],
-    timeout: 20000,
-    forceNew: true,
   });
 
-  socketRef.current.on("connect", () => {
-    console.log("✅ Connected to interview server with ID:", socketRef.current.id);
-    socketIdRef.current = socketRef.current.id;
+  socketRef.current = socket;
+
+  socket.on("connect", () => {
+    console.log("✅ Connected to socket server");
+    socketIdRef.current = socket.id;
+
+    socket.emit("join-interview", {
+      interviewCode: interviewCode,
+    });
+  });
+
+  // ✅ FIXED: Single user-joined handler
+  socket.on("user-joined", (id, clients) => {
+    console.log("👤 User joined:", id, "All clients:", clients);
     
-    socketRef.current.emit("join-interview", interviewCode);
-    toast.success("Connected to interview session!");
+    if (clients.length > 2) {
+      console.warn("⚠️ Interview room full");
+      return;
+    }
+    
+    handleUserJoined(id, clients, socketRef, socketIdRef, setVideos, videoRef);
   });
 
-  socketRef.current.on("connect_error", (error) => {
-    console.error("❌ Connection error:", error);
-    toast.error("Failed to connect to interview server");
-  });
-
-  socketRef.current.on("signal", (fromId, message) => {
-    console.log("📡 Received signal from:", fromId);
-    gotMessageFromServer(fromId, message, socketRef, socketIdRef);
-  });
-
-  socketRef.current.on("user-left", (id) => {
+  socket.on("user-left", (id) => {
     console.log("👋 User left:", id);
     setVideos((videos) => {
       const filtered = videos.filter((video) => video.socketId !== id);
@@ -63,12 +66,53 @@ export const connectToInterviewSocketServer = ({
     }
   });
 
-  socketRef.current.on("user-joined", (id, clients) => {
-    console.log("👤 User joined:", id, "All clients:", clients);
-    handleUserJoined(id, clients, socketRef, socketIdRef, setVideos, videoRef);
+  // ✅ FIXED: Use same event names as meetings for consistency
+  socket.on("user-camera-toggled", (userId, isEnabled) => {
+    console.log(`📹 User ${userId} camera ${isEnabled ? 'ON' : 'OFF'}`);
+    
+    setVideos((videos) => 
+      videos.map((video) => 
+        video.socketId === userId 
+          ? { ...video, isCameraOff: !isEnabled }
+          : video
+      )
+    );
   });
 
-  socketRef.current.on("malpractice-detected", (data) => {
+  socket.on("user-microphone-toggled", (userId, isEnabled) => {
+    console.log(`🎤 User ${userId} mic ${isEnabled ? 'ON' : 'OFF'}`);
+    
+    setVideos((videos) => 
+      videos.map((video) => 
+        video.socketId === userId 
+          ? { ...video, isMuted: !isEnabled }
+          : video
+      )
+    );
+  });
+
+  socket.on("interview-full", () => {
+    toast.error("Interview room is full. Only 2 participants allowed.");
+    socket.disconnect();
+    window.location.reload();
+  });
+
+  socket.on("interview-joined", (data) => {
+    console.log("✅ Successfully joined interview:", data);
+    toast.success("Connected to interview session!");
+  });
+
+  socket.on("connect_error", (error) => {
+    console.error("❌ Connection error:", error);
+    toast.error("Failed to connect to interview server");
+  });
+
+  socket.on("signal", (fromId, message) => {
+    console.log("📡 Received signal from:", fromId);
+    gotMessageFromServer(fromId, message, socketRef, socketIdRef);
+  });
+
+  socket.on("malpractice-detected", (data) => {
     console.log("🚨 Malpractice detected:", data);
     if (setAnomalies) {
       setAnomalies((prev) => [
@@ -84,27 +128,26 @@ export const connectToInterviewSocketServer = ({
     }
   });
 
-  socketRef.current.on("code-change", (data) => {
+  socket.on("code-change", (data) => {
     console.log("💻 Code change received:", data);
     const event = new CustomEvent('interviewCodeChange', { detail: data });
     window.dispatchEvent(event);
   });
 
-  socketRef.current.on("language-change", (data) => {
+  socket.on("language-change", (data) => {
     console.log("🔧 Language change received:", data);
     if (window.handleLanguageChange) {
       window.handleLanguageChange(data);
     }
   });
 
-  // Add output change listener
-  socketRef.current.on("output-change", (data) => {
+  socket.on("output-change", (data) => {
     console.log("📤 Output change received:", data);
     const event = new CustomEvent('interviewOutputChange', { detail: data });
     window.dispatchEvent(event);
   });
 
-  socketRef.current.on("disconnect", (reason) => {
+  socket.on("disconnect", (reason) => {
     console.log("❌ Disconnected from interview server:", reason);
     toast.info("Disconnected from interview session");
   });
@@ -112,62 +155,23 @@ export const connectToInterviewSocketServer = ({
   return socketRef.current;
 };
 
-const gotMessageFromServer = async (fromId, message, socketRef, socketIdRef) => {
-  if (fromId === socketIdRef.current) return;
-  
-  try {
-    const signal = JSON.parse(message);
-    console.log("📡 Processing signal:", signal.type || (signal.sdp ? signal.sdp.type : "ice"), "from:", fromId);
-    
-    if (!connections[fromId]) {
-      console.warn("⚠️ No connection exists for:", fromId);
-      return;
-    }
-    
-    if (signal.sdp) {
-      console.log("🔄 Setting remote description for:", fromId);
-      await connections[fromId].setRemoteDescription(new RTCSessionDescription(signal.sdp));
-      
-      if (signal.sdp.type === "offer") {
-        console.log("📞 Creating answer for offer from:", fromId);
-        const answer = await connections[fromId].createAnswer();
-        await connections[fromId].setLocalDescription(answer);
-        
-        socketRef.current.emit(
-          "signal",
-          fromId,
-          JSON.stringify({ sdp: connections[fromId].localDescription })
-        );
-        console.log("📤 Sent answer to:", fromId);
-      }
-    }
-    
-    if (signal.ice) {
-      try {
-        await connections[fromId].addIceCandidate(new RTCIceCandidate(signal.ice));
-        console.log("🧊 Added ICE candidate for:", fromId);
-      } catch (error) {
-        console.warn("⚠️ Error adding ICE candidate:", error);
-      }
-    }
-  } catch (error) {
-    console.error("❌ Error processing signal:", error);
-  }
-};
-
+// ✅ FIXED: Simplified handleUserJoined
 const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, videoRef) => {
   console.log("🚀 Handling user joined:", id, "Current clients:", clients);
   
-  clients.forEach(socketListId => {
-    if (socketListId !== socketIdRef.current && connections[socketListId]) {
-      console.log("🧹 Cleaning up existing connection:", socketListId);
-      connections[socketListId].close();
-      delete connections[socketListId];
-    }
-  });
+  const otherParticipants = clients.filter(clientId => clientId !== socketIdRef.current);
   
-  for (const socketListId of clients) {
-    if (socketListId === socketIdRef.current) continue;
+  // Clean up existing connections
+  for (const existingId in connections) {
+    if (!otherParticipants.includes(existingId)) {
+      console.log("🧹 Cleaning up connection:", existingId);
+      connections[existingId].close();
+      delete connections[existingId];
+    }
+  }
+  
+  for (const socketListId of otherParticipants) {
+    if (connections[socketListId]) continue; // Skip if already exists
     
     console.log("🔗 Setting up connection for:", socketListId);
     
@@ -181,95 +185,54 @@ const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, 
           socketListId,
           JSON.stringify({ ice: event.candidate })
         );
-      } else {
-        console.log("🏁 ICE gathering complete for:", socketListId);
       }
     };
 
     connections[socketListId].onconnectionstatechange = () => {
       const state = connections[socketListId].connectionState;
       console.log(`🔗 Connection state for ${socketListId}:`, state);
-      
-      if (state === 'connected') {
-        console.log("✅ Peer connection established with:", socketListId);
-      } else if (state === 'failed' || state === 'disconnected') {
-        console.log("❌ Peer connection failed/disconnected with:", socketListId);
-      }
     };
 
     connections[socketListId].ontrack = (event) => {
-      console.log("📹 Received track from:", socketListId, "Streams:", event.streams.length);
+      console.log("📹 Received track from:", socketListId);
       const [stream] = event.streams;
       
       if (stream && stream.getTracks().length > 0) {
-        console.log("✅ Valid stream received with tracks:", stream.getTracks().map(t => t.kind));
-        
         setVideos((videos) => {
-          const existingVideo = videos.find(video => video.socketId === socketListId);
+          // Remove any existing video for this socketId
+          const filtered = videos.filter(v => v.socketId !== socketListId);
           
-          if (existingVideo) {
-            console.log("🔄 Updating existing video for:", socketListId);
-            const updatedVideos = videos.map(video =>
-              video.socketId === socketListId ? { ...video, stream } : video
-            );
-            if (videoRef) videoRef.current = updatedVideos;
-            return updatedVideos;
-          } else {
-            console.log("➕ Adding new video for:", socketListId);
-            const newVideo = {
-              socketId: socketListId,
-              stream,
-              autoPlay: true,
-              playsinline: true,
-            };
-            const updatedVideos = [...videos, newVideo];
-            if (videoRef) videoRef.current = updatedVideos;
-            return updatedVideos;
-          }
+          const newVideo = {
+            socketId: socketListId,
+            stream,
+            autoPlay: true,
+            playsinline: true,
+            isMuted: false,
+            isCameraOff: false,
+          };
+          
+          const result = [...filtered, newVideo];
+          if (videoRef) videoRef.current = result;
+          return result;
         });
-      } else {
-        console.warn("⚠️ Received empty or invalid stream from:", socketListId);
       }
     };
-
+    
+    // Add local stream to connection
     const localStream = window.localStream;
     if (localStream && localStream.getTracks().length > 0) {
-      console.log("📤 Adding local stream tracks to peer connection for:", socketListId);
       localStream.getTracks().forEach(track => {
-        console.log("🎵 Adding track:", track.kind, "enabled:", track.enabled);
         connections[socketListId].addTrack(track, localStream);
       });
-    } else {
-      console.warn("⚠️ No local stream available when setting up connection for:", socketListId);
-      
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true
-        });
-        window.localStream = stream;
-        stream.getTracks().forEach(track => {
-          connections[socketListId].addTrack(track, stream);
-        });
-        console.log("✅ Created and added new local stream for:", socketListId);
-      } catch (error) {
-        console.error("❌ Failed to get user media for:", socketListId, error);
-      }
     }
   }
-
+  
+  // Create offers if you're the joining user
   if (id === socketIdRef.current) {
-    console.log("📞 Creating offers as the joining user");
-    for (const socketListId of clients) {
-      if (socketListId === socketIdRef.current) continue;
-      
+    for (const socketListId of otherParticipants) {
       if (connections[socketListId]) {
         try {
-          console.log("📤 Creating offer for:", socketListId);
-          const offer = await connections[socketListId].createOffer({
-            offerToReceiveAudio: true,
-            offerToReceiveVideo: true
-          });
+          const offer = await connections[socketListId].createOffer();
           await connections[socketListId].setLocalDescription(offer);
           
           socketRef.current.emit(
@@ -277,12 +240,50 @@ const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, 
             socketListId,
             JSON.stringify({ sdp: connections[socketListId].localDescription })
           );
-          console.log("✅ Sent offer to:", socketListId);
         } catch (error) {
-          console.error("❌ Error creating offer for:", socketListId, error);
+          console.error("❌ Error creating offer:", error);
         }
       }
     }
+  }
+};
+
+const gotMessageFromServer = async (fromId, message, socketRef, socketIdRef) => {
+  if (fromId === socketIdRef.current) return;
+  
+  try {
+    const signal = JSON.parse(message);
+    console.log("📡 Processing signal from:", fromId);
+    
+    if (!connections[fromId]) {
+      console.warn("⚠️ No connection exists for:", fromId);
+      return;
+    }
+    
+    if (signal.sdp) {
+      await connections[fromId].setRemoteDescription(new RTCSessionDescription(signal.sdp));
+      
+      if (signal.sdp.type === "offer") {
+        const answer = await connections[fromId].createAnswer();
+        await connections[fromId].setLocalDescription(answer);
+        
+        socketRef.current.emit(
+          "signal",
+          fromId,
+          JSON.stringify({ sdp: connections[fromId].localDescription })
+        );
+      }
+    }
+    
+    if (signal.ice) {
+      try {
+        await connections[fromId].addIceCandidate(new RTCIceCandidate(signal.ice));
+      } catch (error) {
+        console.warn("⚠️ Error adding ICE candidate:", error);
+      }
+    }
+  } catch (error) {
+    console.error("❌ Error processing signal:", error);
   }
 };
 
@@ -321,7 +322,6 @@ export const sendCodeChange = (socketRef, code, language, interviewCode) => {
   }
 };
 
-// Add new function for output sync
 export const sendOutputChange = (socketRef, output, interviewCode) => {
   if (socketRef.current) {
     console.log("📤 Sending output change");

@@ -1,377 +1,380 @@
 import React, { useState, useMemo } from "react";
 
-const InterviewDashboard = ({ anomalies, userRole, onClose }) => {
+const InterviewDashboard = ({ anomalies, userRole }) => {
   const [selectedAnomaly, setSelectedAnomaly] = useState(null);
+  const [filterSeverity, setFilterSeverity] = useState("all");
+
+  console.log("📊 Dashboard received anomalies:", anomalies); // Keep this debug
 
   const getAnomalyInfo = (type) => {
     const anomalyMap = {
-      // Critical Anomalies
       multiple_people: {
         icon: "fa-solid fa-users",
-        color: "text-red-500",
+        color: "text-red-400",
+        bgColor: "bg-red-500/10",
+        borderColor: "border-red-500/30",
         severity: "critical",
-        category: "Cheating",
-        priority: 1,
+        category: "Security",
+        description: "Multiple faces detected",
       },
       candidate_absent: {
         icon: "fa-solid fa-user-slash",
-        color: "text-red-500",
+        color: "text-red-400",
+        bgColor: "bg-red-500/10",
+        borderColor: "border-red-500/30",
         severity: "critical",
         category: "Presence",
-        priority: 1,
+        description: "Candidate not visible",
       },
       no_movement_detected: {
-        icon: "fa-solid fa-pause-circle",
-        color: "text-red-500",
+        icon: "fa-solid fa-user-clock",
+        color: "text-red-400",
+        bgColor: "bg-red-500/10",
+        borderColor: "border-red-500/30",
         severity: "critical",
         category: "Presence",
-        priority: 1,
+        description: "No movement detected",
       },
-
-      // Warning Anomalies
       looking_away_extended: {
         icon: "fa-solid fa-eye-slash",
-        color: "text-orange-500",
+        color: "text-orange-400",
+        bgColor: "bg-orange-500/10",
+        borderColor: "border-orange-500/30",
         severity: "warning",
         category: "Attention",
-        priority: 2,
+        description: "Looking away from screen",
       },
       suspicious_head_movement: {
-        icon: "fa-solid fa-arrows-rotate",
-        color: "text-orange-500",
+        icon: "fa-solid fa-arrows-alt",
+        color: "text-orange-400",
+        bgColor: "bg-orange-500/10",
+        borderColor: "border-orange-500/30",
         severity: "warning",
         category: "Behavior",
-        priority: 2,
+        description: "Suspicious head movement",
       },
       reading_behavior: {
         icon: "fa-solid fa-book-open",
-        color: "text-orange-500",
+        color: "text-orange-400",
+        bgColor: "bg-orange-500/10",
+        borderColor: "border-orange-500/30",
         severity: "warning",
         category: "Cheating",
-        priority: 2,
+        description: "Potential reading behavior",
       },
-
-      // Moderate Anomalies
       eyes_closed_extended: {
         icon: "fa-solid fa-eye-low-vision",
-        color: "text-yellow-500",
+        color: "text-yellow-400",
+        bgColor: "bg-yellow-500/10",
+        borderColor: "border-yellow-500/30",
         severity: "moderate",
-        category: "Attention",
-        priority: 3,
+        category: "Focus",
+        description: "Eyes closed too long",
       },
       high_stress_detected: {
-        icon: "fa-solid fa-face-frown",
-        color: "text-yellow-500",
+        icon: "fa-solid fa-face-dizzy",
+        color: "text-yellow-400",
+        bgColor: "bg-yellow-500/10",
+        borderColor: "border-yellow-500/30",
         severity: "moderate",
-        category: "Behavior",
-        priority: 3,
-      },
-
-      // Minor/Technical Anomalies
-      candidate_too_far: {
-        icon: "fa-solid fa-magnifying-glass-minus",
-        color: "text-blue-500",
-        severity: "minor",
-        category: "Technical",
-        priority: 4,
-      },
-      candidate_too_close: {
-        icon: "fa-solid fa-magnifying-glass-plus",
-        color: "text-blue-500",
-        severity: "minor",
-        category: "Technical",
-        priority: 4,
+        category: "Wellness",
+        description: "High stress detected",
       },
       poor_video_quality: {
         icon: "fa-solid fa-video-slash",
-        color: "text-gray-500",
-        severity: "minor",
-        category: "Technical",
-        priority: 4,
+        color: "text-blue-400",
+        bgColor: "bg-blue-500/10",
+        borderColor: "border-blue-500/30",
+        severity: "technical",
+        category: "Quality",
+        description: "Poor video quality",
       },
       poor_lighting: {
         icon: "fa-solid fa-lightbulb",
-        color: "text-gray-500",
-        severity: "minor",
-        category: "Technical",
-        priority: 4,
+        color: "text-blue-400",
+        bgColor: "bg-blue-500/10",
+        borderColor: "border-blue-500/30",
+        severity: "technical",
+        category: "Setup",
+        description: "Poor lighting conditions",
+      },
+      candidate_too_far: {
+        icon: "fa-solid fa-search-minus",
+        color: "text-blue-400",
+        bgColor: "bg-blue-500/10",
+        borderColor: "border-blue-500/30",
+        severity: "technical",
+        category: "Setup",
+        description: "Too far from camera",
+      },
+      candidate_too_close: {
+        icon: "fa-solid fa-search-plus",
+        color: "text-blue-400",
+        bgColor: "bg-blue-500/10",
+        borderColor: "border-blue-500/30",
+        severity: "technical",
+        category: "Setup",
+        description: "Too close to camera",
       },
     };
 
-    return (
-      anomalyMap[type] || {
-        icon: "fa-solid fa-triangle-exclamation",
-        color: "text-gray-500",
-        severity: "minor",
-        category: "Unknown",
-        priority: 5,
-      }
-    );
-  };
-
-  const { severityCounts, sortedAnomalies } = useMemo(() => {
-    const counts = {
-      critical: 0,
-      warning: 0,
-      moderate: 0,
-      minor: 0,
+    return anomalyMap[type] || {
+      icon: "fa-solid fa-exclamation-triangle",
+      color: "text-slate-400",
+      bgColor: "bg-slate-500/10",
+      borderColor: "border-slate-500/30",
+      severity: "technical",
+      category: "Other",
+      description: type?.replace(/_/g, " ") || "Unknown",
     };
+  };
 
-    anomalies.forEach((anomaly) => {
-      const info = getAnomalyInfo(anomaly.type);
-      counts[info.severity] = (counts[info.severity] || 0) + 1;
-    });
+  const processedAnomalies = useMemo(() => {
+    if (!anomalies || !Array.isArray(anomalies) || anomalies.length === 0) {
+      return {
+        filtered: [],
+        counts: { critical: 0, warning: 0, moderate: 0, technical: 0 },
+      };
+    }
 
-    const sorted = [...anomalies]
-      .sort((a, b) => {
-        const timeA = a.rawTimestamp || 0;
-        const timeB = b.rawTimestamp || 0;
+    const counts = { critical: 0, warning: 0, moderate: 0, technical: 0 };
 
-        if (timeA !== timeB) {
-          return timeB - timeA;
-        }
-
-        const aInfo = getAnomalyInfo(a.type);
-        const bInfo = getAnomalyInfo(b.type);
-        return aInfo.priority - bInfo.priority;
+    const filtered = anomalies
+      .map((anomaly) => {
+        const info = getAnomalyInfo(anomaly.type);
+        counts[info.severity]++;
+        return { ...anomaly, info };
       })
-      .slice(0, 25);
+      .filter((anomaly) => {
+        if (filterSeverity === "all") return true;
+        return anomaly.info.severity === filterSeverity;
+      })
+      .sort((a, b) => {
+        // Sort by multiple criteria for better ordering
+        // 1. First try rawTimestamp (if available)
+        if (a.rawTimestamp && b.rawTimestamp) {
+          return b.rawTimestamp - a.rawTimestamp; // Newest first
+        }
+        
+        // 2. Then try id (assuming higher id = newer)
+        if (a.id && b.id) {
+          return b.id - a.id; // Higher id first
+        }
+        
+        // 3. Finally try timestamp string parsing
+        const timeA = new Date(a.timestamp || 0).getTime();
+        const timeB = new Date(b.timestamp || 0).getTime();
+        
+        if (timeA && timeB && !isNaN(timeA) && !isNaN(timeB)) {
+          return timeB - timeA; // Newest first
+        }
+        
+        // 4. Fallback to array index (reverse order)
+        const indexA = anomalies.indexOf(a);
+        const indexB = anomalies.indexOf(b);
+        return indexB - indexA; // Later added items first
+      });
 
-    return { severityCounts: counts, sortedAnomalies: sorted };
-  }, [anomalies]);
+    console.log("🔄 Sorted anomalies:", filtered.map(a => ({ 
+      id: a.id, 
+      type: a.type, 
+      timestamp: a.timestamp, 
+      rawTimestamp: a.rawTimestamp 
+    })));
 
-  const exportAnomalies = () => {
-    const data = anomalies.map((anomaly) => ({
-      timestamp: anomaly.timestamp,
-      type: anomaly.type,
-      confidence: anomaly.confidence,
-      description: anomaly.description,
-      severity: getAnomalyInfo(anomaly.type).severity,
-      category: getAnomalyInfo(anomaly.type).category,
-    }));
-
-    const blob = new Blob([JSON.stringify(data, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `interview-anomalies-${
-      new Date().toISOString().split("T")[0]
-    }.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const getRiskLevel = () => {
-    const criticalTypes = [
-      "multiple_people",
-      "candidate_absent",
-      "no_movement_detected",
-    ];
-    const warningTypes = [
-      "reading_behavior",
-      "looking_away_extended",
-      "suspicious_head_movement",
-    ];
-
-    const criticalCount = anomalies.filter((a) =>
-      criticalTypes.includes(a.type)
-    ).length;
-    const warningCount = anomalies.filter((a) =>
-      warningTypes.includes(a.type)
-    ).length;
-
-    if (criticalCount > 0) return { level: "HIGH RISK", color: "text-red-400" };
-    if (warningCount > 3)
-      return { level: "MODERATE RISK", color: "text-yellow-400" };
-    if (anomalies.length > 8)
-      return { level: "MODERATE RISK", color: "text-yellow-400" };
-    return { level: "LOW RISK", color: "text-green-400" };
-  };
-
-  const riskAssessment = getRiskLevel();
+    return { filtered, counts };
+  }, [anomalies, filterSeverity]);
 
   if (userRole !== "interviewer") {
     return null;
   }
 
   return (
-    <div className="bg-gray-800 rounded-lg p-4 h-full flex flex-col">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-3">
-        <h3 className="text-white text-lg font-medium flex items-center gap-2">
-          <i className="fa-solid fa-shield-halved text-blue-400"></i>
-          Live Anomaly Monitoring
-        </h3>
-        <div className="flex items-center space-x-4 text-sm">
-          <span className="text-green-400 flex items-center gap-1">
-            <i className="fa-solid fa-circle text-xs"></i> Live
+    <div className="bg-slate-900/70 backdrop-blur border border-white/10 rounded-xl h-full flex flex-col overflow-hidden">
+      {/* Custom Scrollbar Styles */}
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: rgba(30, 41, 59, 0.3);
+          border-radius: 3px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+          border-radius: 3px;
+          transition: all 0.2s ease;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(135deg, #2563eb, #1e40af);
+          width: 8px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb:active {
+          background: linear-gradient(135deg, #1d4ed8, #1e3a8a);
+        }
+        
+        /* Firefox scrollbar */
+        .custom-scrollbar {
+          scrollbar-width: thin;
+          scrollbar-color: #3b82f6 rgba(30, 41, 59, 0.3);
+        }
+      `}</style>
+
+      {/* Header - Fixed Height */}
+      <div className="flex-shrink-0 px-3 py-2 border-b border-white/10 bg-slate-900/50">
+        <div className="flex items-center justify-between">
+          <h3 className="text-slate-200 text-sm font-medium flex items-center gap-2">
+            <i className="fa-solid fa-shield-alt text-blue-400"></i>
+            Monitor
+          </h3>
+          <span className="text-slate-400 text-xs">
+            {anomalies?.length || 0} events
           </span>
-          <span className="text-gray-400">Total: {anomalies.length}</span>
-          {anomalies.length > 0 && (
+        </div>
+      </div>
+
+      {/* Filter Tabs - Fixed Height */}
+      <div className="flex-shrink-0 px-3 py-1.5 border-b border-white/10 bg-slate-900/30">
+        <div className="flex gap-1 text-xs overflow-x-auto">
+          {[
+            {
+              key: "all",
+              label: "All",
+              count: anomalies?.length || 0
+            },
+            {
+              key: "critical",
+              label: "Critical",
+              count: processedAnomalies.counts.critical
+            },
+            {
+              key: "warning",
+              label: "Warning",
+              count: processedAnomalies.counts.warning
+            },
+            {
+              key: "moderate",
+              label: "Moderate",
+              count: processedAnomalies.counts.moderate
+            },
+            {
+              key: "technical",
+              label: "Technical",
+              count: processedAnomalies.counts.technical
+            }
+          ].map((tab) => (
             <button
-              onClick={exportAnomalies}
-              className="text-xs bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded transition-colors flex items-center gap-1"
-              title="Export anomalies as JSON"
+              key={tab.key}
+              onClick={() => setFilterSeverity(tab.key)}
+              className={`px-2 py-1 rounded transition flex-shrink-0 ${
+                filterSeverity === tab.key
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+              }`}
             >
-              <i className="fa-solid fa-download"></i> Export
+              {tab.label} {tab.count > 0 && `(${tab.count})`}
             </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Scrollable Content Area with Custom Scrollbar */}
+      <div className="flex-1 min-h-0">
+        <div className="h-full overflow-y-auto px-3 py-2 custom-scrollbar">
+          {processedAnomalies.filtered.length === 0 ? (
+            <div className="text-center py-6">
+              <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-slate-700/50 flex items-center justify-center">
+                <i className="fa-solid fa-clipboard-list text-slate-400"></i>
+              </div>
+              <p className="text-slate-400 text-xs">
+                {filterSeverity === "all" ? "No events" : `No ${filterSeverity} events`}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {processedAnomalies.filtered.map((anomaly, index) => (
+                <div
+                  key={anomaly.id || `anomaly-${index}`}
+                  className={`${anomaly.info.bgColor} ${anomaly.info.borderColor} rounded-lg border-l-4 p-2.5 transition cursor-pointer hover:bg-opacity-60 ${
+                    selectedAnomaly?.id === anomaly.id ? "ring-1 ring-blue-400" : ""
+                  } ${index === 0 ? "ring-1 ring-green-400/50" : ""}`} // Highlight newest
+                  onClick={() => setSelectedAnomaly(selectedAnomaly?.id === anomaly.id ? null : anomaly)}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <div className={`${anomaly.info.color} text-sm flex-shrink-0 mt-0.5`}>
+                      <i className={anomaly.info.icon}></i>
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`${anomaly.info.color} text-xs font-medium capitalize truncate`}>
+                          {anomaly.type?.replace(/_/g, " ") || "Unknown"}
+                          {index === 0 && <span className="ml-1 text-green-400 text-[8px]">• NEW</span>}
+                        </span>
+                        <span className={`text-xs font-medium ${anomaly.info.color} ml-2 flex-shrink-0`}>
+                          {Math.round((anomaly.confidence || 0) * 100)}%
+                        </span>
+                      </div>
+
+                      <p className="text-slate-300 text-xs mb-1 leading-tight">
+                        {anomaly.info.description}
+                      </p>
+
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-500 bg-slate-800/30 px-1.5 py-0.5 rounded truncate text-[10px]">
+                          {anomaly.info.category}
+                        </span>
+                        <span className="text-slate-400 text-[10px] ml-2 flex-shrink-0">
+                          {anomaly.timestamp}
+                        </span>
+                      </div>
+
+                      {selectedAnomaly?.id === anomaly.id && (
+                        <div className="mt-2 pt-2 border-t border-white/10">
+                          <div className="text-[10px] text-slate-400 space-y-1">
+                            <div><strong>Type:</strong> {anomaly.type}</div>
+                            <div><strong>Confidence:</strong> {Math.round((anomaly.confidence || 0) * 100)}%</div>
+                            <div><strong>Severity:</strong> {anomaly.info.severity}</div>
+                            {anomaly.description && (
+                              <div><strong>Details:</strong> {anomaly.description}</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>
 
-      {/* Severity Stats */}
-      <div className="mb-4 grid grid-cols-4 gap-2">
-        <div className="bg-red-600 bg-opacity-20 p-2 rounded text-center border border-red-600/30">
-          <div className="text-red-400 text-lg font-bold">
-            {severityCounts.critical}
+      {/* Footer Stats - Fixed Height */}
+      <div className="flex-shrink-0 px-3 py-1.5 border-t border-white/10 bg-slate-900/50">
+        <div className="grid grid-cols-4 gap-1 text-center">
+          <div>
+            <div className="text-red-400 text-sm font-medium">{processedAnomalies.counts.critical}</div>
+            <div className="text-red-300 text-[10px]">Critical</div>
           </div>
-          <div className="text-xs text-red-300 flex items-center justify-center gap-1">
-            <i className="fa-solid fa-exclamation-triangle"></i> Critical
+          <div>
+            <div className="text-orange-400 text-sm font-medium">{processedAnomalies.counts.warning}</div>
+            <div className="text-orange-300 text-[10px]">Warning</div>
           </div>
-        </div>
-        <div className="bg-yellow-600 bg-opacity-20 p-2 rounded text-center border border-yellow-600/30">
-          <div className="text-yellow-400 text-lg font-bold">
-            {severityCounts.warning}
+          <div>
+            <div className="text-yellow-400 text-sm font-medium">{processedAnomalies.counts.moderate}</div>
+            <div className="text-yellow-300 text-[10px]">Moderate</div>
           </div>
-          <div className="text-xs text-yellow-300 flex items-center justify-center gap-1">
-            <i className="fa-solid fa-exclamation-circle"></i> Warning
-          </div>
-        </div>
-        <div className="bg-orange-600 bg-opacity-20 p-2 rounded text-center border border-orange-600/30">
-          <div className="text-orange-400 text-lg font-bold">
-            {severityCounts.moderate}
-          </div>
-          <div className="text-xs text-orange-300 flex items-center justify-center gap-1">
-            <i className="fa-solid fa-info-circle"></i> Moderate
-          </div>
-        </div>
-        <div className="bg-blue-600 bg-opacity-20 p-2 rounded text-center border border-blue-600/30">
-          <div className="text-blue-400 text-lg font-bold">
-            {severityCounts.minor}
-          </div>
-          <div className="text-xs text-blue-300 flex items-center justify-center gap-1">
-            <i className="fa-solid fa-cog"></i> Minor
+          <div>
+            <div className="text-blue-400 text-sm font-medium">{processedAnomalies.counts.technical}</div>
+            <div className="text-blue-300 text-[10px]">Technical</div>
           </div>
         </div>
       </div>
-
-      {/* Anomaly List */}
-      <div className="flex-1 overflow-y-auto">
-        {anomalies.length === 0 ? (
-          <div className="text-center py-8">
-            <div className="text-4xl mb-3 text-green-400">
-              <i className="fa-solid fa-check-circle"></i>
-            </div>
-            <p className="text-gray-400 text-sm font-medium">
-              No anomalies detected
-            </p>
-            <p className="text-gray-500 text-xs">
-              Candidate behavior appears normal
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {sortedAnomalies.map((anomaly) => {
-              const info = getAnomalyInfo(anomaly.type);
-              const bgColor =
-                {
-                  critical:
-                    "bg-red-900/40 border-red-500/50 hover:bg-red-900/60",
-                  warning:
-                    "bg-yellow-900/40 border-yellow-500/50 hover:bg-yellow-900/60",
-                  moderate:
-                    "bg-orange-900/40 border-orange-500/50 hover:bg-orange-900/60",
-                  minor:
-                    "bg-blue-900/40 border-blue-500/50 hover:bg-blue-900/60",
-                }[info.severity] ||
-                "bg-gray-900/40 border-gray-500/50 hover:bg-gray-900/60";
-
-              return (
-                <div
-                  key={anomaly.id}
-                  className={`p-3 ${bgColor} rounded-lg border-l-4 transition-all duration-200 cursor-pointer ${
-                    selectedAnomaly?.id === anomaly.id
-                      ? "ring-2 ring-blue-500"
-                      : ""
-                  }`}
-                  onClick={() =>
-                    setSelectedAnomaly(
-                      selectedAnomaly?.id === anomaly.id ? null : anomaly
-                    )
-                  }
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className={`text-lg ${info.color}`}>
-                        <i className={info.icon}></i>
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2">
-                          <span className={`font-bold ${info.color} text-sm`}>
-                            {anomaly.type.replace(/[_-]/g, " ").toUpperCase()}
-                          </span>
-                          <span className="text-xs bg-gray-700/60 px-2 py-1 rounded border border-gray-600/50">
-                            {info.category}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-300 mt-1 leading-relaxed">
-                          {anomaly.description}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right flex flex-col items-end space-y-1">
-                      <div
-                        className={`text-xs px-2 py-1 rounded font-bold border ${
-                          info.severity === "critical"
-                            ? "bg-red-600 text-white border-red-500"
-                            : info.severity === "warning"
-                            ? "bg-yellow-600 text-black border-yellow-500"
-                            : info.severity === "moderate"
-                            ? "bg-orange-600 text-white border-orange-500"
-                            : "bg-blue-600 text-white border-blue-500"
-                        }`}
-                      >
-                        {(anomaly.confidence * 100).toFixed(0)}%
-                      </div>
-                      <div className="text-xs text-gray-400 flex items-center gap-1">
-                        <i className="fa-solid fa-clock"></i>
-                        {anomaly.timestamp}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Risk Assessment Footer */}
-      {anomalies.length > 0 && (
-        <div className="mt-4 pt-3 border-t border-gray-700">
-          <div className="text-center">
-            <div
-              className={`text-lg font-bold ${riskAssessment.color} flex items-center justify-center gap-2`}
-            >
-              <i
-                className={`fa-solid ${
-                  riskAssessment.level === "HIGH RISK"
-                    ? "fa-exclamation-triangle"
-                    : riskAssessment.level === "MODERATE RISK"
-                    ? "fa-exclamation-circle"
-                    : "fa-check-circle"
-                }`}
-              ></i>
-              {riskAssessment.level}
-            </div>
-            <div className="text-xs text-gray-400 mt-1">
-              Overall Interview Assessment
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
