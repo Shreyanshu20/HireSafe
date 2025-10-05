@@ -13,6 +13,8 @@ export default function VideoGrid({
   interviewCode,
   isInterviewer,
   onAnomalyDetected,
+  video, // ✅ ADD video prop for camera state
+  audio, // ✅ ADD audio prop for mic state
 }) {
   const canvasRef = useRef();
   const remoteCanvasRefs = useRef({});
@@ -106,63 +108,110 @@ export default function VideoGrid({
   const handleVideoLoadedData = (e, videoId) => {};
 
   return (
-    <div className="bg-gray-900 rounded-lg overflow-hidden flex gap-2">
-      <div className="relative w-1/2">
-        <div className="relative bg-gray-800 rounded-lg overflow-hidden aspect-video">
-          <video
-            ref={localVideoRef}
-            autoPlay
-            muted
-            playsInline
-            className="w-full h-full object-cover"
-            onError={(e) => handleVideoError(e, "local")}
-            onLoadedData={(e) => handleVideoLoadedData(e, "local")}
-          />
+    <div className="bg-slate-900/30 rounded-2xl border border-white/10 p-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Local Video (You) */}
+        <div className="relative aspect-video rounded-xl overflow-hidden bg-slate-800/50 border border-white/5">
+          {!video ? (
+            // ✅ YOUR CAMERA IS OFF - Show placeholder like meetings
+            <div className="w-full h-full bg-slate-800 flex flex-col items-center justify-center">
+              <div className="w-16 h-16 rounded-full bg-slate-700/80 flex items-center justify-center mb-3">
+                <i className="fa-solid fa-user text-slate-400 text-xl"></i>
+              </div>
+              <div className="text-slate-300 text-sm font-medium">
+                You {isInterviewer ? "(Interviewer)" : "(Candidate)"}
+              </div>
+              <div className="text-slate-400 text-xs mt-1">Camera off</div>
+            </div>
+          ) : (
+            // ✅ YOUR CAMERA IS ON - Show video
+            <video
+              ref={localVideoRef}
+              autoPlay
+              muted
+              playsInline
+              className="w-full h-full object-cover"
+              onError={(e) => handleVideoError(e, "local")}
+              onLoadedData={(e) => handleVideoLoadedData(e, "local")}
+            />
+          )}
 
-          <div className="absolute bottom-2 left-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-xs">
-            You {isInterviewer ? "(Interviewer)" : "(Candidate)"}
+          {/* ✅ FIXED: Your Name Badge - Perfect rectangle */}
+          <div className="absolute bottom-2 left-2 bg-slate-900/80 backdrop-blur px-2 py-1 rounded">
+            <span className="text-white text-xs font-medium leading-none">
+              You {isInterviewer ? "(Interviewer)" : "(Candidate)"}
+            </span>
+          </div>
+
+          {/* ✅ YOUR STATUS ICONS - Like meetings */}
+          <div className="absolute bottom-2 right-2 flex gap-1">
+            {!audio && (
+              <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
+                <i className="fa-solid fa-microphone-slash text-white text-xs"></i>
+              </div>
+            )}
+            {!video && (
+              <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
+                <i className="fa-solid fa-video-slash text-white text-xs"></i>
+              </div>
+            )}
           </div>
         </div>
-      </div>
 
-      <div className="space-y-2 w-1/2">
-        {videos.length === 0 ? (
-          <div className="bg-gray-800 rounded-lg aspect-video flex items-center justify-center">
-            <div className="text-center text-gray-400">
-              <div className="text-4xl mb-2">👤</div>
-              <p>
-                Waiting for {isInterviewer ? "candidate" : "interviewer"} to
-                join...
-              </p>
+        {/* Remote Video (Other Person) */}
+        <div className="relative aspect-video rounded-xl overflow-hidden bg-slate-800/50 border border-white/5">
+          {videos.length === 0 ? (
+            // ✅ NO ONE HAS JOINED YET
+            <div className="w-full h-full bg-slate-800 flex flex-col items-center justify-center">
+              <div className="w-16 h-16 rounded-full bg-slate-700/80 flex items-center justify-center mb-3">
+                <i className="fa-solid fa-user-plus text-slate-400 text-xl"></i>
+              </div>
+              <div className="text-slate-300 text-sm font-medium">
+                {isInterviewer ? "Candidate" : "Interviewer"}
+              </div>
+              <div className="text-slate-400 text-xs mt-1">Waiting to join...</div>
             </div>
-          </div>
-        ) : (
-          videos.map((video) => (
-            <div key={video.socketId} className="relative">
-              <div className="relative bg-gray-800 rounded-lg overflow-hidden aspect-video">
-                <video
-                  autoPlay
-                  playsInline
-                  className="w-full h-full object-cover"
-                  data-socket-id={video.socketId}
-                  ref={(videoElement) => {
-                    if (videoElement) {
-                      remoteVideoRefs.current[video.socketId] = videoElement;
-                      if (video.stream) {
-                        videoElement.srcObject = video.stream;
-                        videoElement.play().catch((err) => {});
+          ) : (
+            videos.map((videoData) => (
+              <React.Fragment key={videoData.socketId}>
+                {videoData.isCameraOff ? (
+                  // ✅ REMOTE CAMERA IS OFF - Show placeholder like meetings
+                  <div className="w-full h-full bg-slate-800 flex flex-col items-center justify-center">
+                    <div className="w-16 h-16 rounded-full bg-slate-700/80 flex items-center justify-center mb-3">
+                      <i className="fa-solid fa-user text-slate-400 text-xl"></i>
+                    </div>
+                    <div className="text-slate-300 text-sm font-medium">
+                      {isInterviewer ? "Candidate" : "Interviewer"}
+                    </div>
+                    <div className="text-slate-400 text-xs mt-1">Camera off</div>
+                  </div>
+                ) : (
+                  // ✅ REMOTE CAMERA IS ON - Show video
+                  <video
+                    autoPlay
+                    playsInline
+                    className="w-full h-full object-cover"
+                    data-socket-id={videoData.socketId}
+                    ref={(videoElement) => {
+                      if (videoElement) {
+                        remoteVideoRefs.current[videoData.socketId] = videoElement;
+                        if (videoData.stream) {
+                          videoElement.srcObject = videoData.stream;
+                          videoElement.play().catch((err) => {});
+                        }
                       }
-                    }
-                  }}
-                  onError={(e) => handleVideoError(e, video.socketId)}
-                  onLoadedData={(e) => handleVideoLoadedData(e, video.socketId)}
-                />
+                    }}
+                    onError={(e) => handleVideoError(e, videoData.socketId)}
+                    onLoadedData={(e) => handleVideoLoadedData(e, videoData.socketId)}
+                  />
+                )}
 
-                {isInterviewer && (
+                {/* Face Detection Canvas - Only for interviewer watching candidate */}
+                {isInterviewer && !videoData.isCameraOff && (
                   <canvas
                     ref={(canvas) => {
                       if (canvas) {
-                        remoteCanvasRefs.current[video.socketId] = canvas;
+                        remoteCanvasRefs.current[videoData.socketId] = canvas;
                       }
                     }}
                     className="absolute top-0 left-0 w-full h-full pointer-events-none"
@@ -170,13 +219,30 @@ export default function VideoGrid({
                   />
                 )}
 
-                <div className="absolute bottom-2 left-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-xs">
-                  {isInterviewer ? "Candidate" : "Interviewer"}
+                {/* ✅ FIXED: Remote Name Badge - Perfect rectangle */}
+                <div className="absolute bottom-2 left-2 bg-slate-900/80 backdrop-blur px-2 py-1 rounded">
+                  <span className="text-white text-xs font-medium leading-none">
+                    {isInterviewer ? "Candidate" : "Interviewer"}
+                  </span>
                 </div>
-              </div>
-            </div>
-          ))
-        )}
+
+                {/* ✅ REMOTE STATUS ICONS - Always show when user has joined */}
+                <div className="absolute bottom-2 right-2 flex gap-1">
+                  {videoData.isMuted && (
+                    <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
+                      <i className="fa-solid fa-microphone-slash text-white text-xs"></i>
+                    </div>
+                  )}
+                  {videoData.isCameraOff && (
+                    <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
+                      <i className="fa-solid fa-video-slash text-white text-xs"></i>
+                    </div>
+                  )}
+                </div>
+              </React.Fragment>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
