@@ -9,6 +9,8 @@ let timeOnline = {};
 
 // NEW: Track user states for meetings
 let meetingUserStates = {}; // { roomCode: { socketId: { video: true, audio: true, screen: false } } }
+let meetingUserNames = {}; // ✅ ADD THIS - Track usernames { roomCode: { socketId: "username" } }
+let interviewUserNames = {}; // ✅ ADD THIS - Track usernames { interviewCode: { socketId: "username" } }
 
 export const connectToSocket = (server) => {
   const io = new Server(server, {
@@ -26,12 +28,13 @@ export const connectToSocket = (server) => {
     timeOnline[socket.id] = new Date();
     
     // =================== MEETING EVENTS (FIXED) ===================
-    socket.on('join-call', (meetingCode) => {
-      console.log(`User ${socket.id} joining MEETING room: ${meetingCode}`);
+    socket.on('join-call', (meetingCode, userName) => { // ✅ ADD userName PARAMETER
+      console.log(`User ${socket.id} (${userName}) joining MEETING room: ${meetingCode}`);
       
       if (meetingConnections[meetingCode] === undefined) {
         meetingConnections[meetingCode] = [];
         meetingUserStates[meetingCode] = {};
+        meetingUserNames[meetingCode] = {}; // ✅ INITIALIZE USERNAME TRACKING
       }
       
       meetingConnections[meetingCode].push(socket.id);
@@ -44,16 +47,22 @@ export const connectToSocket = (server) => {
         screen: false
       };
       
+      // ✅ STORE USERNAME
+      meetingUserNames[meetingCode][socket.id] = userName || 'Anonymous';
+      
       const clients = Array.from(io.sockets.adapter.rooms.get(`meeting-${meetingCode}`) || []);
       
       // CRITICAL: Send current user states to new user IMMEDIATELY
       socket.emit('user-states', meetingUserStates[meetingCode]);
       
-      // Notify others about new user
-      socket.to(`meeting-${meetingCode}`).emit('user-joined', socket.id, clients);
-      socket.emit('user-joined', socket.id, clients);
+      // ✅ SEND USERNAMES TO NEW USER
+      socket.emit('user-names', meetingUserNames[meetingCode]);
       
-      console.log(`📊 Sent user states to ${socket.id}:`, meetingUserStates[meetingCode]);
+      // Notify others about new user (✅ ADD USERNAME)
+      socket.to(`meeting-${meetingCode}`).emit('user-joined', socket.id, clients, userName);
+      socket.emit('user-joined', socket.id, clients, userName);
+      
+      console.log(`📊 Sent user states and names to ${socket.id}`);
     });
 
     socket.on('signal', (toId, message) => {
@@ -128,22 +137,33 @@ export const connectToSocket = (server) => {
     });
 
     // =================== INTERVIEW EVENTS (UNCHANGED) ===================
-    socket.on('join-interview', (interviewCode) => {
-      console.log(`User ${socket.id} joining INTERVIEW room: ${interviewCode}`);
+    socket.on('join-interview', (data) => { // ✅ NOW ACCEPTS { interviewCode, userName }
+      const interviewCode = typeof data === 'string' ? data : data.interviewCode;
+      const userName = typeof data === 'object' ? data.userName : 'Anonymous';
+      
+      console.log(`User ${socket.id} (${userName}) joining INTERVIEW room: ${interviewCode}`);
       
       if (interviewConnections[interviewCode] === undefined) {
         interviewConnections[interviewCode] = [];
         interviewMessages[interviewCode] = [];
+        interviewUserNames[interviewCode] = {}; // ✅ INITIALIZE USERNAME TRACKING
       }
       
       interviewConnections[interviewCode].push(socket.id);
       socket.join(`interview-${interviewCode}`);
       
+      // ✅ STORE USERNAME
+      interviewUserNames[interviewCode][socket.id] = userName;
+      
       const clients = Array.from(io.sockets.adapter.rooms.get(`interview-${interviewCode}`) || []);
       console.log(`Interview room ${interviewCode} clients:`, clients);
       
-      socket.to(`interview-${interviewCode}`).emit('user-joined', socket.id, clients);
-      socket.emit('user-joined', socket.id, clients);
+      // ✅ SEND USERNAMES TO NEW USER
+      socket.emit('user-names', interviewUserNames[interviewCode]);
+      
+      // ✅ NOTIFY OTHERS WITH USERNAME
+      socket.to(`interview-${interviewCode}`).emit('user-joined', socket.id, clients, userName);
+      socket.emit('user-joined', socket.id, clients, userName);
     });
 
     socket.on('interview-chat-message', (message, sender) => {
@@ -303,12 +323,18 @@ export const connectToSocket = (server) => {
             delete meetingUserStates[roomCode][socket.id];
           }
           
+          // ✅ CLEAN UP USERNAME
+          if (meetingUserNames[roomCode] && meetingUserNames[roomCode][socket.id]) {
+            delete meetingUserNames[roomCode][socket.id];
+          }
+          
           socket.to(`meeting-${roomCode}`).emit('user-left', socket.id);
           
           if (clients.length === 0) {
             delete meetingConnections[roomCode];
             delete meetingMessages[roomCode];
             delete meetingUserStates[roomCode];
+            delete meetingUserNames[roomCode]; // ✅ CLEAN UP USERNAMES
           }
           break;
         }
@@ -320,11 +346,18 @@ export const connectToSocket = (server) => {
         const index = clients.indexOf(socket.id);
         if (index !== -1) {
           clients.splice(index, 1);
+          
+          // ✅ CLEAN UP USERNAME
+          if (interviewUserNames[roomCode] && interviewUserNames[roomCode][socket.id]) {
+            delete interviewUserNames[roomCode][socket.id];
+          }
+          
           socket.to(`interview-${roomCode}`).emit('user-left', socket.id);
           
           if (clients.length === 0) {
             delete interviewConnections[roomCode];
             delete interviewMessages[roomCode];
+            delete interviewUserNames[roomCode]; // ✅ CLEAN UP USERNAMES
           }
           break;
         }

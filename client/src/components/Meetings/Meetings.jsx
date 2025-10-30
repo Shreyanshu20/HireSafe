@@ -7,7 +7,7 @@ import { connectToSocketServer } from "./utils/socketUtils";
 import { getPermissions } from "./utils/mediaUtils";
 
 export default function Meetings() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, userData } = useAuth();
 
   const socketRef = useRef();
   const socketIdRef = useRef();
@@ -37,6 +37,9 @@ export default function Meetings() {
     }
   }, [isAuthenticated, isLoading]);
 
+  // Get username
+  const userName = userData?.username || userData?.email?.split("@")[0] || "Anonymous";
+
   // Restore meeting state on component mount
   useEffect(() => {
     if (isAuthenticated) {
@@ -58,6 +61,7 @@ export default function Meetings() {
           meetingCode: savedMeetingCode,
           setVideos,
           videoRef,
+          userName, // ADD THIS
         });
       }
 
@@ -69,7 +73,7 @@ export default function Meetings() {
         localVideoRef,
       });
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, userName]); // ADD userName TO DEPS
 
   // Save meeting state when entering a meeting
   const handleJoinMeeting = () => {
@@ -88,6 +92,7 @@ export default function Meetings() {
       meetingCode,
       setVideos,
       videoRef,
+      userName, // ADD THIS
     });
   };
 
@@ -128,8 +133,7 @@ export default function Meetings() {
         </div>
       </div>
     );
-  }
-  else {
+  } else {
     return (
       <div className="min-h-screen w-full relative bg-black">
         {/* Same background as Layout */}

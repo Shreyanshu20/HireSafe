@@ -22,8 +22,9 @@ export const connectToInterviewSocketServer = ({
   setVideos,
   videoRef,
   setAnomalies,
+  userName, // ✅ PARAMETER ADDED
 }) => {
-  console.log("🔗 Connecting to interview socket server...");
+  console.log("🔗 Connecting to interview socket server...", { interviewCode, userName });
 
   const socket = io(server_url, {
     withCredentials: true,
@@ -36,21 +37,23 @@ export const connectToInterviewSocketServer = ({
     console.log("✅ Connected to socket server");
     socketIdRef.current = socket.id;
 
+    // ✅ SEND USERNAME WHEN JOINING
     socket.emit("join-interview", {
       interviewCode: interviewCode,
+      userName: userName
     });
   });
 
-  // ✅ FIXED: Single user-joined handler
-  socket.on("user-joined", (id, clients) => {
-    console.log("👤 User joined:", id, "All clients:", clients);
-    
-    if (clients.length > 2) {
-      console.warn("⚠️ Interview room full");
-      return;
-    }
-    
-    handleUserJoined(id, clients, socketRef, socketIdRef, setVideos, videoRef);
+  // ✅ ADD THIS - Receive usernames from server
+  socket.on("user-names", (userNames) => {
+    console.log("📛 Received interview usernames:", userNames);
+    window.interviewUserNames = userNames;
+  });
+
+  // ✅ UPDATE THIS - Receive username with user-joined
+  socket.on("user-joined", (id, clients, userName) => {
+    console.log("👤 User joined interview:", { id, clients, userName });
+    handleUserJoined(id, clients, userName, socketRef, socketIdRef, setVideos, videoRef);
   });
 
   socket.on("user-left", (id) => {
@@ -66,7 +69,6 @@ export const connectToInterviewSocketServer = ({
     }
   });
 
-  // ✅ FIXED: Use same event names as meetings for consistency
   socket.on("user-camera-toggled", (userId, isEnabled) => {
     console.log(`📹 User ${userId} camera ${isEnabled ? 'ON' : 'OFF'}`);
     
@@ -155,13 +157,12 @@ export const connectToInterviewSocketServer = ({
   return socketRef.current;
 };
 
-// ✅ FIXED: Simplified handleUserJoined
-const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, videoRef) => {
-  console.log("🚀 Handling user joined:", id, "Current clients:", clients);
+// ✅ UPDATE THIS FUNCTION - Add userName parameter
+const handleUserJoined = async (id, clients, userName, socketRef, socketIdRef, setVideos, videoRef) => {
+  console.log("🚀 Handling user joined:", { id, clients, userName });
   
   const otherParticipants = clients.filter(clientId => clientId !== socketIdRef.current);
   
-  // Clean up existing connections
   for (const existingId in connections) {
     if (!otherParticipants.includes(existingId)) {
       console.log("🧹 Cleaning up connection:", existingId);
@@ -171,7 +172,7 @@ const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, 
   }
   
   for (const socketListId of otherParticipants) {
-    if (connections[socketListId]) continue; // Skip if already exists
+    if (connections[socketListId]) continue;
     
     console.log("🔗 Setting up connection for:", socketListId);
     
@@ -198,13 +199,21 @@ const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, 
       const [stream] = event.streams;
       
       if (stream && stream.getTracks().length > 0) {
+        // ✅ GET USERNAME FROM GLOBAL STATE OR PARAMETER
+        const videoUserName = window.interviewUserNames?.[socketListId] || userName || 'Anonymous';
+        
+        console.log(`📺 Stream from ${socketListId}:`, {
+          userName: videoUserName,
+          tracks: stream.getTracks().length
+        });
+        
         setVideos((videos) => {
-          // Remove any existing video for this socketId
           const filtered = videos.filter(v => v.socketId !== socketListId);
           
           const newVideo = {
             socketId: socketListId,
             stream,
+            username: videoUserName, // ✅ ADD USERNAME HERE
             autoPlay: true,
             playsinline: true,
             isMuted: false,
@@ -213,12 +222,12 @@ const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, 
           
           const result = [...filtered, newVideo];
           if (videoRef) videoRef.current = result;
+          console.log("📹 Updated interview videos with username:", result);
           return result;
         });
       }
     };
     
-    // Add local stream to connection
     const localStream = window.localStream;
     if (localStream && localStream.getTracks().length > 0) {
       localStream.getTracks().forEach(track => {
@@ -227,7 +236,6 @@ const handleUserJoined = async (id, clients, socketRef, socketIdRef, setVideos, 
     }
   }
   
-  // Create offers if you're the joining user
   if (id === socketIdRef.current) {
     for (const socketListId of otherParticipants) {
       if (connections[socketListId]) {

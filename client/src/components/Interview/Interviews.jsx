@@ -8,7 +8,7 @@ import { connectToInterviewSocketServer } from "./utils/socketUtils";
 import { getPermissions } from "./utils/mediaUtils"; // Add this import
 
 export default function Interviews() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, userData } = useAuth();
   const navigate = useNavigate();
 
   const socketRef = useRef();
@@ -28,6 +28,8 @@ export default function Interviews() {
   const [videos, setVideos] = useState([]);
   const [cameraStream, setCameraStream] = useState(null);
   const [anomalies, setAnomalies] = useState([]);
+
+  const userName = userData?.username || userData?.email?.split('@')[0] || 'Anonymous';
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -57,10 +59,10 @@ export default function Interviews() {
           setVideos,
           videoRef,
           setAnomalies,
+          userName, // ✅ ADD THIS
         });
       }
 
-      // Get permissions like meetings do
       getPermissions({
         setVideoAvailable,
         setAudioAvailable,
@@ -68,7 +70,7 @@ export default function Interviews() {
         localVideoRef
       });
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, userName]); // ✅ ADD userName
 
   const handleJoinInterview = () => {
     setVideo(true);
@@ -86,6 +88,7 @@ export default function Interviews() {
       setVideos,
       videoRef,
       setAnomalies,
+      userName, // ✅ ADD THIS
     });
   };
 

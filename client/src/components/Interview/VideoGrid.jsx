@@ -15,7 +15,7 @@ export default function VideoGrid({
   onAnomalyDetected,
   video,
   audio,
-  userName = 'You', // ✅ ADD userName PROP
+  userName = 'You',
 }) {
   const canvasRef = useRef();
   const remoteCanvasRefs = useRef({});
@@ -113,6 +113,11 @@ export default function VideoGrid({
     return id.substring(0, 4);
   }
 
+  // ✅ ADD THIS - Determine remote user's role
+  const getRemoteUserRole = () => {
+    return isInterviewer ? "(Candidate)" : "(Interviewer)";
+  };
+
   return (
     <div className="bg-slate-900/30 rounded-2xl border border-white/10 p-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -189,7 +194,7 @@ export default function VideoGrid({
                     </div>
                     {/* ✅ SHOW REMOTE USERNAME */}
                     <div className="text-slate-300 text-sm font-medium">
-                      {videoData.username || `User ${shortId(videoData.socketId)}`}
+                      {videoData.username || `User ${shortId(videoData.socketId)}`} {getRemoteUserRole()}
                     </div>
                     <div className="text-slate-400 text-xs mt-1">Camera off</div>
                   </div>
@@ -227,10 +232,10 @@ export default function VideoGrid({
                   />
                 )}
 
-                {/* ✅ SHOW REMOTE USERNAME IN BADGE */}
+                {/* ✅ SHOW USERNAME WITH ROLE IN BADGE */}
                 <div className="absolute bottom-2 left-2 bg-slate-900/80 backdrop-blur px-2 py-1 rounded">
                   <span className="text-white text-xs font-medium leading-none">
-                    {videoData.username || `User ${shortId(videoData.socketId)}`}
+                    {videoData.username || `User ${shortId(videoData.socketId)}`} {getRemoteUserRole()}
                   </span>
                 </div>
 
