@@ -4,6 +4,7 @@ import VideoControls from "./VideoControls";
 import VideoGrid from "./VideoGrid";
 import ChatModal from "./ChatModal";
 import { handleEndCall } from "./utils/mediaUtils";
+import { useAuth } from "../../context/AuthContext"; // ✅ ADD THIS
 
 export default function MeetingRoom({
   meetingCode,
@@ -18,29 +19,44 @@ export default function MeetingRoom({
   socketRef, socketIdRef,
   onLeaveMeeting,
 }) {
+  const { userData } = useAuth(); // ✅ CHANGE: user -> userData
   const [showModal, setShowModal] = useState(false);
   const [messages, setMessages] = useState([]);
   const [message, setMessage] = useState("");
   const [newMessage, setNewMessage] = useState(0);
 
-  const participants = useMemo(() => 1 + (videos?.length || 0), [videos]); // you + others
+  const participants = useMemo(() => 1 + (videos?.length || 0), [videos]);
+
+  // ✅ CHANGE: user?.username -> userData?.username
+  const userName = userData?.username || userData?.email?.split('@')[0] || 'Anonymous';
+
+  const sendMessage = useCallback(() => {
+    if (!message.trim()) return;
+    console.log("🚀 SENDING MESSAGE:", { message, userName, socketId: socketIdRef.current });
+    // ✅ SEND ACTUAL USER NAME (not "You")
+    socketRef.current?.emit("chat-message", message, userName);
+    setMessage("");
+  }, [message, socketRef, userName, socketIdRef]);
 
   useEffect(() => {
     if (!socketRef.current) return;
+    
+    // ✅ RECEIVE MESSAGE: Show "You" only for your own messages
     const addMessage = (data, sender, socketIdSender) => {
-      setMessages((prev) => [...prev, { sender, data }]);
+      console.log("📥 RECEIVED MESSAGE:", { data, sender, socketIdSender, mySocketId: socketIdRef.current });
+      setMessages((prev) => [
+        ...prev, 
+        { 
+          sender: socketIdSender === socketIdRef.current ? "You" : sender,
+          data 
+        }
+      ]);
       if (socketIdSender !== socketIdRef.current) setNewMessage((n) => n + 1);
     };
+    
     socketRef.current.on("chat-message", addMessage);
     return () => socketRef.current?.off("chat-message", addMessage);
   }, [socketRef, socketIdRef]);
-
-  // ✅ MEMOIZE CALLBACKS to prevent unnecessary re-renders
-  const sendMessage = useCallback(() => {
-    if (!message.trim()) return;
-    socketRef.current?.emit("chat-message", message, "You");
-    setMessage("");
-  }, [message, socketRef]);
 
   const openChat = useCallback(() => { 
     setShowModal(true); 
@@ -49,7 +65,6 @@ export default function MeetingRoom({
 
   const closeChat = useCallback(() => setShowModal(false), []);
 
-  // ✅ CRITICAL FIX: Don't cause re-renders - just update state
   const handleMessage = useCallback((e) => {
     setMessage(e.target.value);
   }, []);
@@ -69,17 +84,16 @@ export default function MeetingRoom({
     }
   }, [meetingCode]);
 
-  // ✅ MEMOIZE VideoGrid props to prevent unnecessary re-renders
   const videoGridProps = useMemo(() => ({
     localVideoRef,
     videos,
     screen,
     screenStream,
     video,
-    audio
-  }), [localVideoRef, videos, screen, screenStream, video, audio]);
+    audio,
+    userName // ✅ ADD THIS
+  }), [localVideoRef, videos, screen, screenStream, video, audio, userName]);
 
-  // ✅ MEMOIZE VideoControls props
   const videoControlsProps = useMemo(() => ({
     video, setVideo,
     audio, setAudio,

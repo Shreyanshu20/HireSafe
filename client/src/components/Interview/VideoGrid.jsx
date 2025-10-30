@@ -13,8 +13,9 @@ export default function VideoGrid({
   interviewCode,
   isInterviewer,
   onAnomalyDetected,
-  video, // ✅ ADD video prop for camera state
-  audio, // ✅ ADD audio prop for mic state
+  video,
+  audio,
+  userName = 'You', // ✅ ADD userName PROP
 }) {
   const canvasRef = useRef();
   const remoteCanvasRefs = useRef({});
@@ -107,6 +108,11 @@ export default function VideoGrid({
   const handleVideoError = (e, videoId) => {};
   const handleVideoLoadedData = (e, videoId) => {};
 
+  function shortId(id) {
+    if (!id) return '';
+    return id.substring(0, 4);
+  }
+
   return (
     <div className="bg-slate-900/30 rounded-2xl border border-white/10 p-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -118,8 +124,9 @@ export default function VideoGrid({
               <div className="w-16 h-16 rounded-full bg-slate-700/80 flex items-center justify-center mb-3">
                 <i className="fa-solid fa-user text-slate-400 text-xl"></i>
               </div>
+              {/* ✅ SHOW USERNAME */}
               <div className="text-slate-300 text-sm font-medium">
-                You {isInterviewer ? "(Interviewer)" : "(Candidate)"}
+                {userName} {isInterviewer ? "(Interviewer)" : "(Candidate)"}
               </div>
               <div className="text-slate-400 text-xs mt-1">Camera off</div>
             </div>
@@ -136,10 +143,10 @@ export default function VideoGrid({
             />
           )}
 
-          {/* ✅ FIXED: Your Name Badge - Perfect rectangle */}
+          {/* ✅ SHOW USERNAME IN BADGE */}
           <div className="absolute bottom-2 left-2 bg-slate-900/80 backdrop-blur px-2 py-1 rounded">
             <span className="text-white text-xs font-medium leading-none">
-              You {isInterviewer ? "(Interviewer)" : "(Candidate)"}
+              {userName} {isInterviewer ? "(Interviewer)" : "(Candidate)"}
             </span>
           </div>
 
@@ -180,8 +187,9 @@ export default function VideoGrid({
                     <div className="w-16 h-16 rounded-full bg-slate-700/80 flex items-center justify-center mb-3">
                       <i className="fa-solid fa-user text-slate-400 text-xl"></i>
                     </div>
+                    {/* ✅ SHOW REMOTE USERNAME */}
                     <div className="text-slate-300 text-sm font-medium">
-                      {isInterviewer ? "Candidate" : "Interviewer"}
+                      {videoData.username || `User ${shortId(videoData.socketId)}`}
                     </div>
                     <div className="text-slate-400 text-xs mt-1">Camera off</div>
                   </div>
@@ -219,10 +227,10 @@ export default function VideoGrid({
                   />
                 )}
 
-                {/* ✅ FIXED: Remote Name Badge - Perfect rectangle */}
+                {/* ✅ SHOW REMOTE USERNAME IN BADGE */}
                 <div className="absolute bottom-2 left-2 bg-slate-900/80 backdrop-blur px-2 py-1 rounded">
                   <span className="text-white text-xs font-medium leading-none">
-                    {isInterviewer ? "Candidate" : "Interviewer"}
+                    {videoData.username || `User ${shortId(videoData.socketId)}`}
                   </span>
                 </div>
 

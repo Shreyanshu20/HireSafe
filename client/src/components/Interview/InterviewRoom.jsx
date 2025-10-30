@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import InterviewControls from "./InterviewControls";
 import VideoGrid from "./VideoGrid";
@@ -8,6 +7,7 @@ import CodeEditor from "./CodeEditor";
 import InterviewDashboard from "./InterviewDashboard";
 import { handleEndCall } from "./utils/mediaUtils";
 import { sendCodeChange, sendInterviewMessage, sendOutputChange } from "./utils/socketUtils";
+import { useAuth } from "../../context/AuthContext"; // ✅ ADD THIS
 
 export default function InterviewRoom({
   interviewCode,
@@ -28,7 +28,7 @@ export default function InterviewRoom({
   onLeaveInterview,
   interviewState,
 }) {
-  const navigate = useNavigate();
+  const { userData } = useAuth(); // ✅ CHANGE: user -> userData
   const [showModal, setShowModal] = useState(false);
   const [messages, setMessages] = useState([]);
   const [message, setMessage] = useState("");
@@ -38,11 +38,13 @@ export default function InterviewRoom({
   const [codeOutput, setCodeOutput] = useState("");
   const [userRole, setUserRole] = useState("candidate");
   
-  // Refs to prevent unnecessary re-renders
   const codeChangeTimeoutRef = useRef(null);
   const lastCodeChangeRef = useRef("");
   const isUpdatingFromSocketRef = useRef(false);
   const isUpdatingOutputFromSocketRef = useRef(false);
+
+  // ✅ CHANGE: user?.username -> userData?.username
+  const userName = userData?.username || userData?.email?.split('@')[0] || 'Anonymous';
 
   // ✅ STYLED: Add participant count like meetings
   const participants = useMemo(() => {
@@ -82,10 +84,15 @@ export default function InterviewRoom({
     }
   }, []);
 
+  // ✅ RECEIVE MESSAGE: Show "You" only for your own messages
   const handleInterviewMessage = useCallback((message, sender, socketIdSender) => {
+    console.log("📥 RECEIVED INTERVIEW MESSAGE:", { message, sender, socketIdSender, mySocketId: socketIdRef.current });
     setMessages((prevMessages) => [
       ...prevMessages,
-      { sender: sender, data: message },
+      { 
+        sender: socketIdSender === socketIdRef.current ? "You" : sender,
+        data: message 
+      },
     ]);
     if (socketIdSender !== socketIdRef.current) {
       setNewMessage((prevNewMessage) => prevNewMessage + 1);
@@ -169,12 +176,14 @@ export default function InterviewRoom({
     }
   }, [socketRef]);
 
+  // ✅ SEND MESSAGE: Send actual user name (not "You")
   const sendMessage = useCallback(() => {
     if (message.trim()) {
-      sendInterviewMessage(socketRef, message, "You");
+      console.log("🚀 SENDING INTERVIEW MESSAGE:", { message, userName, socketId: socketIdRef.current });
+      sendInterviewMessage(socketRef, message, userName);
       setMessage("");
     }
-  }, [message, socketRef]);
+  }, [message, socketRef, userName, socketIdRef]);
 
   const openChat = useCallback(() => {
     setShowModal(true);
@@ -235,8 +244,9 @@ export default function InterviewRoom({
     isInterviewer: userRole === "interviewer",
     onAnomalyDetected: (anomaly) => {},
     video,
-    audio
-  }), [localVideoRef, videos, socketRef, interviewCode, userRole, video, audio]);
+    audio,
+    userName // ✅ ADD THIS
+  }), [localVideoRef, videos, socketRef, interviewCode, userRole, video, audio, userName]);
 
   const interviewControlsProps = useMemo(() => ({
     video, setVideo,
@@ -260,7 +270,7 @@ export default function InterviewRoom({
   return (
     <div className="h-screen flex flex-col">
       {/* ✅ STYLED: Header like meetings */}
-      <div className="flex-shrink-0 bg-slate-900/70 backdrop-blur border border-white/10 rounded-xl mx-4 mt-2 mb-2 px-4 py-3 flex items-center justify-between">
+      <div className="flex-shrink-0 bg-slate-900/70 backdrop-blur border border-white/10 rounded-xl mx-4 mt-4 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-slate-800 text-slate-200">
             <i className="fa-solid fa-user-tie text-purple-400"></i>
