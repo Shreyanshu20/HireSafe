@@ -109,10 +109,17 @@ export const connectToSocketServer = ({
     );
   });
 
-  socketRef.current.on("screen-share-started", (fromId) => {
-    console.log(`🖥️ ${fromId} started screen sharing`);
+  // ✅ UPDATE: Receive username with screen-share-started
+  socketRef.current.on("screen-share-started", (fromId, userName) => {
+    console.log(`🖥️ ${userName} (${fromId}) started screen sharing`);
     window.screenShareUsers = window.screenShareUsers || new Set();
     window.screenShareUsers.add(fromId);
+    
+    // ✅ STORE THE USERNAME OF WHO'S SHARING
+    if (!window.meetingUserNames) window.meetingUserNames = {};
+    if (userName) {
+      window.meetingUserNames[fromId] = userName;
+    }
     
     if (!window.meetingUserStates) window.meetingUserStates = {};
     if (!window.meetingUserStates[fromId]) window.meetingUserStates[fromId] = {};
@@ -121,7 +128,7 @@ export const connectToSocketServer = ({
     setVideos((videos) => 
       videos.map(video => 
         video.socketId === fromId 
-          ? { ...video, isScreenShare: true }
+          ? { ...video, isScreenShare: true, username: userName || video.username }
           : video
       )
     );

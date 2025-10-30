@@ -275,7 +275,9 @@ export const connectToSocket = (server) => {
             meetingUserStates[roomCode][socket.id].screen = true;
           }
           
-          socket.to(`meeting-${roomCode}`).emit('screen-share-started', socket.id);
+          // ✅ SEND USERNAME WITH SCREEN SHARE EVENT
+          const userName = meetingUserNames[roomCode]?.[socket.id] || socket.username || 'Anonymous';
+          socket.to(`meeting-${roomCode}`).emit('screen-share-started', socket.id, userName);
           break;
         }
       }

@@ -14,7 +14,7 @@ const VideoGrid = memo(function VideoGrid({
   screenStream,
   video,
   audio,
-  userName = 'You', // ✅ ADD userName PROP
+  userName = 'You',
 }) {
   // Find who's screen sharing
   const screenShareVideo = videos.find((v) => v.isScreenShare === true);
@@ -23,14 +23,16 @@ const VideoGrid = memo(function VideoGrid({
   // Main presenter
   const mainPresenter = useMemo(() => {
     if (screenShareVideo) {
+      // ✅ GET USERNAME FROM THE VIDEO OBJECT (already has it from socket)
+      const presenterName = screenShareVideo.username || window.meetingUserNames?.[screenShareVideo.socketId] || 'Someone';
       return {
-        title: `${userName} is presenting`, // ✅ USE userName
+        title: `${presenterName} is presenting`,
         stream: screenShareVideo.stream,
         socketId: screenShareVideo.socketId,
       };
     } else if (screen && screenStream) {
       return {
-        title: `${userName} is presenting`, // ✅ USE userName
+        title: `${userName} is presenting`,
         stream: screenStream,
         socketId: null,
       };
@@ -44,7 +46,7 @@ const VideoGrid = memo(function VideoGrid({
 
     // YOUR CAMERA - use the actual video/audio props
     feeds.push({
-      title: userName, // ✅ USE userName INSTEAD OF "You"
+      title: userName,
       attachRef: localVideoRef,
       muted: true,
       socketId: "local",
@@ -57,7 +59,7 @@ const VideoGrid = memo(function VideoGrid({
     videos.forEach((v) => {
       if (!v.isScreenShare) {
         feeds.push({
-          title: v.username || shortId(v.socketId), // ✅ USE username IF AVAILABLE
+          title: v.username || shortId(v.socketId),
           stream: v.stream,
           isMuted: v.isMuted,
           isCameraOff: v.isCameraOff,
@@ -65,7 +67,7 @@ const VideoGrid = memo(function VideoGrid({
         });
       } else {
         feeds.push({
-          title: v.username || shortId(v.socketId), // ✅ USE username IF AVAILABLE
+          title: v.username || shortId(v.socketId),
           stream: null,
           isMuted: v.isMuted,
           isCameraOff: true,
