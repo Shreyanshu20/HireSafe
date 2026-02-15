@@ -165,10 +165,10 @@ HireSafe addresses all of these by providing a **unified platform** for both cas
 │                      SERVER (Express + Node.js)                 │
 │                                                                 │
 │  ┌────────────────┐  ┌─────────────────┐  ┌──────────────────┐ │
-│  │ Auth Controller │  │ Meeting Control │  │ Interview Control│ │
-│  │ • Register      │  │ • Create        │  │ • Create         │ │
-│  │ • Login         │  │ • Join          │  │ • Join           │ │
-│  │ • Logout        │  │ • End           │  │ • End            │ │
+│  │ Auth Controller│  │ Meeting Control │  │ Interview Control│ │
+│  │ • Register     │  │ • Create        │  │ • Create         │ │
+│  │ • Login        │  │ • Join          │  │ • Join           │ │
+│  │ • Logout       │  │ • End           │  │ • End            │ │
 │  └────────────────┘  └─────────────────┘  └──────────────────┘ │
 │                                                                 │
 │  ┌───────────────────────────────────────────────────────────┐  │
