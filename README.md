@@ -151,25 +151,25 @@ HireSafe addresses all of these by providing a **unified platform** for both cas
 │  │           │  │ • ChatModal   │  │ • InterviewDashboard     │ │
 │  │           │  │ • ScreenShare │  │ • ChatModal              │ │
 │  └───────────┘  └───────┬───────┘  └───────────┬──────────────┘ │
-│                         │    WebRTC + Socket.IO │               │
-│  ┌──────────────┐       │                      │               │
-│  │  Dashboard   │       │                      │               │
-│  │  • Activity  │       │                      │               │
-│  │    Log       │       │                      │               │
-│  └──────┬───────┘       │                      │               │
-│         │ REST API      │                      │               │
-└─────────┼───────────────┼──────────────────────┼───────────────┘
+│                         │   WebRTC + Socket.IO │                │
+│  ┌──────────────┐       │                      │                │
+│  │  Dashboard   │       │                      │                │
+│  │  • Activity  │       │                      │                │
+│  │    Log       │       │                      │                │
+│  └──────┬───────┘       │                      │                │
+│         │ REST API      │                      │                │
+└─────────┼───────────────┼──────────────────────┼────────────────┘
           │               │                      │
           ▼               ▼                      ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                      SERVER (Express + Node.js)                 │
 │                                                                 │
-│  ┌────────────────┐  ┌─────────────────┐  ┌──────────────────┐ │
-│  │ Auth Controller│  │ Meeting Control │  │ Interview Control│ │
-│  │ • Register     │  │ • Create        │  │ • Create         │ │
-│  │ • Login        │  │ • Join          │  │ • Join           │ │
-│  │ • Logout       │  │ • End           │  │ • End            │ │
-│  └────────────────┘  └─────────────────┘  └──────────────────┘ │
+│  ┌────────────────┐  ┌─────────────────┐  ┌──────────────────┐  │
+│  │ Auth Controller│  │ Meeting Control │  │ Interview Control│  │
+│  │ • Register     │  │ • Create        │  │ • Create         │  │
+│  │ • Login        │  │ • Join          │  │ • Join           │  │
+│  │ • Logout       │  │ • End           │  │ • End            │  │
+│  └────────────────┘  └─────────────────┘  └──────────────────┘  │
 │                                                                 │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │                  Socket Manager                           │  │
@@ -180,12 +180,12 @@ HireSafe addresses all of these by providing a **unified platform** for both cas
 │  │  • Disconnect handlers with room cleanup                  │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │                              │                                  │
-│  ┌────────────────┐  ┌───────┴──────┐  ┌─────────────────────┐ │
-│  │ User Controller│  │ Middleware   │  │ Activity Service     │ │
-│  │ • Profile      │  │ • JWT Auth   │  │ • Log activity       │ │
-│  │ • Update       │  │ • Cookie     │  │ • Get activities     │ │
-│  │ • History      │  │   parsing    │  │ • Track sessions     │ │
-│  └────────────────┘  └──────────────┘  └─────────────────────┘ │
+│  ┌────────────────┐  ┌───────┴──────┐  ┌─────────────────────┐  │
+│  │ User Controller│  │ Middleware   │  │ Activity Service    │  │
+│  │ • Profile      │  │ • JWT Auth   │  │ • Log activity      │  │
+│  │ • Update       │  │ • Cookie     │  │ • Get activities    │  │
+│  │ • History      │  │   parsing    │  │ • Track sessions    │  │
+│  └────────────────┘  └──────────────┘  └─────────────────────┘  │
 └─────────────────────────────┬───────────────────────────────────┘
                               │
                               ▼
