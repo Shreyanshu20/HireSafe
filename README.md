@@ -34,9 +34,7 @@
 - [Socket.IO Events](#-socketio-events)
 - [AI-Powered Anomaly Detection](#-ai-powered-anomaly-detection)
 - [Database Models](#-database-models)
-- [Screenshots](#-screenshots)
 - [Contributing](#-contributing)
-- [License](#-license)
 
 ---
 
